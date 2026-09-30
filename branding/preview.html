@@ -1,0 +1,418 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ergo logo</title><style>
+/*
+ * The ergo mark: lifted off the page and, when animated, running.
+ *
+ * `er-logo` is the lift: a coloured drop shadow rather than a box shadow, so
+ * it follows the rounded silhouette. The rest plays one run per 2.4 s cycle:
+ *
+ *   0%        trigger fires
+ *   ~40%      packet passes the step, which lights
+ *   ~74-78%   packet lands, output ring pulses
+ *   rest      a beat of quiet before the next run
+ *
+ * The packet path uses pathLength=100 with a 16-unit dash and a 120-unit gap,
+ * so its head moves from 0 to 136 over the cycle. It starts hidden before the
+ * trigger and ends hidden past the output. The gap is longer than the path,
+ * so there's exactly one packet per run and no stray dash at either end.
+ *
+ * All of it stops under prefers-reduced-motion. The mark is fully legible
+ * static, so nothing is lost.
+ */
+
+.er-logo {
+    filter: drop-shadow(0 8px 22px hsl(38 100% 50% / 0.36));
+    transition: filter 0.4s ease, transform 0.4s ease;
+}
+
+.er-logo:hover {
+    filter: drop-shadow(0 8px 22px hsl(41 100% 55% / 0.45));
+    transform: translateY(-1px);
+}
+
+.er-animated .er-rail {
+    opacity: 0.6;
+}
+
+.er-trigger,
+.er-step,
+.er-output {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+@keyframes er-packet {
+    from {
+        stroke-dashoffset: 16;
+    }
+    to {
+        stroke-dashoffset: -120;
+    }
+}
+
+@keyframes er-fire {
+    0% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+    20%,
+    100% {
+        opacity: 0.75;
+        transform: scale(1);
+    }
+}
+
+@keyframes er-pass {
+    0%,
+    30% {
+        opacity: 0.75;
+        transform: scale(1);
+    }
+    40% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+    56%,
+    100% {
+        opacity: 0.75;
+        transform: scale(1);
+    }
+}
+
+@keyframes er-land {
+    0%,
+    68% {
+        opacity: 0.55;
+        transform: scale(1);
+    }
+    78% {
+        opacity: 1;
+        transform: scale(1.14);
+    }
+    94%,
+    100% {
+        opacity: 0.55;
+        transform: scale(1);
+    }
+}
+
+.er-animated .er-packet {
+    stroke-dasharray: 16 120;
+    animation: er-packet 2.4s linear infinite;
+}
+
+.er-animated .er-trigger {
+    animation: er-fire 2.4s ease-out infinite;
+}
+
+.er-animated .er-step {
+    animation: er-pass 2.4s ease-in-out infinite;
+}
+
+.er-animated .er-output {
+    animation: er-land 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .er-animated .er-packet,
+    .er-animated .er-trigger,
+    .er-animated .er-step,
+    .er-animated .er-output {
+        animation: none;
+    }
+
+    .er-animated .er-packet {
+        opacity: 0;
+    }
+
+    .er-animated .er-rail {
+        opacity: 1;
+    }
+}
+
+body{margin:0;background:#000;color:#aaa;font:13px "IBM Plex Sans",system-ui,sans-serif;display:flex;gap:48px;align-items:center;justify-content:center;min-height:100vh;flex-wrap:wrap}
+.big{width:192px;height:192px} .mid{width:64px;height:64px} .small{width:32px;height:32px}
+figure{margin:0;text-align:center}
+</style></head><body>
+<figure><svg
+            viewBox="0 0 48 48"
+            class="er-logo er-animated big"
+           
+           
+            xmlns="http://www.w3.org/2000/svg"
+        >
+                        <defs>
+                
+                <linearGradient
+                    id="er-mark"
+                    gradientUnits="userSpaceOnUse"
+                    x1="8"
+                    y1="41"
+                    x2="40"
+                    y2="9"
+                >
+                    <stop offset="0%" stop-color="hsl(18 96% 54%)" />
+                    <stop offset="35%" stop-color="hsl(30 98% 55%)" />
+                    <stop offset="70%" stop-color="hsl(41 100% 55%)" />
+                    <stop offset="100%" stop-color="hsl(52 100% 64%)" />
+                </linearGradient>
+                <linearGradient id="er-body" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="hsl(28 30% 13%)" />
+                    <stop offset="50%" stop-color="hsl(34 32% 9%)" />
+                    <stop offset="100%" stop-color="hsl(42 36% 7%)" />
+                </linearGradient>
+                
+                <radialGradient id="er-bloom" cx="50%" cy="34%" r="60%">
+                    <stop offset="0%" stop-color="hsl(41 100% 55%)" stop-opacity="0.34" />
+                    <stop offset="100%" stop-color="hsl(41 100% 55%)" stop-opacity="0" />
+                </radialGradient>
+                <linearGradient id="er-edge" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="hsl(18 96% 54%)" stop-opacity="0.8" />
+                    <stop offset="100%" stop-color="hsl(52 100% 64%)" stop-opacity="0.55" />
+                </linearGradient>
+            </defs>
+
+            
+            <rect x="1" y="1" width="46" height="46" rx="12" fill="url(#er-body)" />
+            <rect x="1" y="1" width="46" height="46" rx="12" fill="url(#er-bloom)" />
+            <rect
+                x="1"
+                y="1"
+                width="46"
+                height="46"
+                rx="12"
+                fill="none"
+                stroke="url(#er-edge)"
+                stroke-width="1.8"
+            />
+
+            
+            <path
+                class="er-rail"
+                d="M13 33.5 C 13.6 25.2, 17.4 17.6, 24 14.5 C 30.2 17.2, 34 23.4, 34.8 28.9"
+                fill="none"
+                stroke="url(#er-mark)"
+                stroke-width="2.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            />
+
+            
+            
+                <path
+                    class="er-packet"
+                    d="M13 33.5 C 13.6 25.2, 17.4 17.6, 24 14.5 C 30.2 17.2, 34 23.4, 34.8 28.9"
+                    pathLength="100"
+                    fill="none"
+                    stroke="url(#er-mark)"
+                    stroke-width="3.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            
+
+            
+            <circle class="er-trigger" cx="13" cy="33.5" r="3.8" fill="url(#er-mark)" />
+
+            
+            <circle class="er-step" cx="24" cy="14.5" r="3.8" fill="url(#er-mark)" />
+
+            
+            <circle
+                class="er-output"
+                cx="35"
+                cy="33.2"
+                r="4.1"
+                fill="none"
+                stroke="url(#er-mark)"
+                stroke-width="2.4"
+            />
+        </svg><figcaption>192 px</figcaption></figure>
+<figure><svg
+            viewBox="0 0 48 48"
+            class="er-logo er-animated mid"
+           
+           
+            xmlns="http://www.w3.org/2000/svg"
+        >
+                        <defs>
+                
+                <linearGradient
+                    id="er-mark"
+                    gradientUnits="userSpaceOnUse"
+                    x1="8"
+                    y1="41"
+                    x2="40"
+                    y2="9"
+                >
+                    <stop offset="0%" stop-color="hsl(18 96% 54%)" />
+                    <stop offset="35%" stop-color="hsl(30 98% 55%)" />
+                    <stop offset="70%" stop-color="hsl(41 100% 55%)" />
+                    <stop offset="100%" stop-color="hsl(52 100% 64%)" />
+                </linearGradient>
+                <linearGradient id="er-body" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="hsl(28 30% 13%)" />
+                    <stop offset="50%" stop-color="hsl(34 32% 9%)" />
+                    <stop offset="100%" stop-color="hsl(42 36% 7%)" />
+                </linearGradient>
+                
+                <radialGradient id="er-bloom" cx="50%" cy="34%" r="60%">
+                    <stop offset="0%" stop-color="hsl(41 100% 55%)" stop-opacity="0.34" />
+                    <stop offset="100%" stop-color="hsl(41 100% 55%)" stop-opacity="0" />
+                </radialGradient>
+                <linearGradient id="er-edge" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="hsl(18 96% 54%)" stop-opacity="0.8" />
+                    <stop offset="100%" stop-color="hsl(52 100% 64%)" stop-opacity="0.55" />
+                </linearGradient>
+            </defs>
+
+            
+            <rect x="1" y="1" width="46" height="46" rx="12" fill="url(#er-body)" />
+            <rect x="1" y="1" width="46" height="46" rx="12" fill="url(#er-bloom)" />
+            <rect
+                x="1"
+                y="1"
+                width="46"
+                height="46"
+                rx="12"
+                fill="none"
+                stroke="url(#er-edge)"
+                stroke-width="1.8"
+            />
+
+            
+            <path
+                class="er-rail"
+                d="M13 33.5 C 13.6 25.2, 17.4 17.6, 24 14.5 C 30.2 17.2, 34 23.4, 34.8 28.9"
+                fill="none"
+                stroke="url(#er-mark)"
+                stroke-width="2.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            />
+
+            
+            
+                <path
+                    class="er-packet"
+                    d="M13 33.5 C 13.6 25.2, 17.4 17.6, 24 14.5 C 30.2 17.2, 34 23.4, 34.8 28.9"
+                    pathLength="100"
+                    fill="none"
+                    stroke="url(#er-mark)"
+                    stroke-width="3.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            
+
+            
+            <circle class="er-trigger" cx="13" cy="33.5" r="3.8" fill="url(#er-mark)" />
+
+            
+            <circle class="er-step" cx="24" cy="14.5" r="3.8" fill="url(#er-mark)" />
+
+            
+            <circle
+                class="er-output"
+                cx="35"
+                cy="33.2"
+                r="4.1"
+                fill="none"
+                stroke="url(#er-mark)"
+                stroke-width="2.4"
+            />
+        </svg><figcaption>64 px</figcaption></figure>
+<figure><svg
+            viewBox="0 0 48 48"
+            class="er-logo er-animated small"
+           
+           
+            xmlns="http://www.w3.org/2000/svg"
+        >
+                        <defs>
+                
+                <linearGradient
+                    id="er-mark"
+                    gradientUnits="userSpaceOnUse"
+                    x1="8"
+                    y1="41"
+                    x2="40"
+                    y2="9"
+                >
+                    <stop offset="0%" stop-color="hsl(18 96% 54%)" />
+                    <stop offset="35%" stop-color="hsl(30 98% 55%)" />
+                    <stop offset="70%" stop-color="hsl(41 100% 55%)" />
+                    <stop offset="100%" stop-color="hsl(52 100% 64%)" />
+                </linearGradient>
+                <linearGradient id="er-body" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="hsl(28 30% 13%)" />
+                    <stop offset="50%" stop-color="hsl(34 32% 9%)" />
+                    <stop offset="100%" stop-color="hsl(42 36% 7%)" />
+                </linearGradient>
+                
+                <radialGradient id="er-bloom" cx="50%" cy="34%" r="60%">
+                    <stop offset="0%" stop-color="hsl(41 100% 55%)" stop-opacity="0.34" />
+                    <stop offset="100%" stop-color="hsl(41 100% 55%)" stop-opacity="0" />
+                </radialGradient>
+                <linearGradient id="er-edge" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="hsl(18 96% 54%)" stop-opacity="0.8" />
+                    <stop offset="100%" stop-color="hsl(52 100% 64%)" stop-opacity="0.55" />
+                </linearGradient>
+            </defs>
+
+            
+            <rect x="1" y="1" width="46" height="46" rx="12" fill="url(#er-body)" />
+            <rect x="1" y="1" width="46" height="46" rx="12" fill="url(#er-bloom)" />
+            <rect
+                x="1"
+                y="1"
+                width="46"
+                height="46"
+                rx="12"
+                fill="none"
+                stroke="url(#er-edge)"
+                stroke-width="1.8"
+            />
+
+            
+            <path
+                class="er-rail"
+                d="M13 33.5 C 13.6 25.2, 17.4 17.6, 24 14.5 C 30.2 17.2, 34 23.4, 34.8 28.9"
+                fill="none"
+                stroke="url(#er-mark)"
+                stroke-width="2.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            />
+
+            
+            
+                <path
+                    class="er-packet"
+                    d="M13 33.5 C 13.6 25.2, 17.4 17.6, 24 14.5 C 30.2 17.2, 34 23.4, 34.8 28.9"
+                    pathLength="100"
+                    fill="none"
+                    stroke="url(#er-mark)"
+                    stroke-width="3.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+            
+
+            
+            <circle class="er-trigger" cx="13" cy="33.5" r="3.8" fill="url(#er-mark)" />
+
+            
+            <circle class="er-step" cx="24" cy="14.5" r="3.8" fill="url(#er-mark)" />
+
+            
+            <circle
+                class="er-output"
+                cx="35"
+                cy="33.2"
+                r="4.1"
+                fill="none"
+                stroke="url(#er-mark)"
+                stroke-width="2.4"
+            />
+        </svg><figcaption>32 px</figcaption></figure>
+</body></html>

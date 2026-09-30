@@ -1,0 +1,12 @@
+# Build output
+/build/
+/backend/target/
+/backend/target-cross/
+/frontend/dist/
+/frontend/node_modules/
+
+# Local development
+.env
+/dev/data/
+/dev/ha-config/*
+!/dev/ha-config/configuration.yaml

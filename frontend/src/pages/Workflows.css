@@ -1,0 +1,207 @@
+.wf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
+}
+
+.wf-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 152px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  transition:
+    border-color var(--ease),
+    transform var(--ease),
+    background var(--ease);
+}
+
+.wf-card:hover {
+  border-color: var(--line-strong);
+}
+
+.wf-card:active {
+  transform: scale(0.99);
+}
+
+.wf-link {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.wf-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wf-top h2 {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-top .switch {
+  position: relative;
+  z-index: 1;
+}
+
+.wf-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.wf-card.off .wf-icon {
+  background: var(--panel-3);
+  color: var(--text-3);
+}
+
+.wf-sentence {
+  flex: 1;
+  margin: 10px 0;
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.wf-foot {
+  display: flex;
+  white-space: nowrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.last-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-2);
+}
+
+.new-card {
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.new-card:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.new-plus {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  transition: transform var(--ease);
+}
+
+.new-card:hover .new-plus {
+  transform: rotate(90deg);
+}
+
+.new-form {
+  justify-content: center;
+  border-color: var(--accent);
+}
+
+.new-form:hover {
+  transform: none;
+}
+
+.new-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.run-now {
+  position: relative;
+  z-index: 1;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.run-now:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.run-banner {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--panel-3);
+  color: var(--text-2);
+  font-weight: 500;
+  animation: pop-in 180ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.run-banner.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.run-banner.err {
+  background: var(--err-soft);
+  color: var(--err);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.wf-foot .never,
+.last-run {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-delete {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+
+.card-delete:hover:not(:disabled) {
+  background: var(--err-soft);
+  color: var(--err);
+}

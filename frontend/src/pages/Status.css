@@ -1,0 +1,22 @@
+.checks {
+  max-width: 760px;
+}
+
+.check {
+  display: grid;
+  grid-template-columns: 22px 180px 1fr;
+  align-items: center;
+  min-height: 58px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.check-name {
+  font-weight: 600;
+}
+
+.meta {
+  margin: 0;
+  padding: 14px 20px;
+  font-size: 13px;
+}

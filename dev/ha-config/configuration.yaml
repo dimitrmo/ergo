@@ -1,0 +1,37 @@
+# Seeded dev config: test entities ergo can trigger on, no real devices.
+homeassistant:
+  name: ergo dev
+  time_zone: Europe/Athens
+  unit_system: metric
+
+frontend:
+http:
+api:
+config:
+history:
+logbook:
+
+input_boolean:
+  test_switch:
+    name: Test switch
+    icon: mdi:toggle-switch
+
+input_number:
+  test_temp:
+    name: Test temperature
+    min: -10
+    max: 40
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 18
+
+input_select:
+  test_mode:
+    name: Test mode
+    options: [home, away, sleep]
+
+template:
+  - sensor:
+      - name: Test feels like
+        unit_of_measurement: "°C"
+        state: "{{ (states('input_number.test_temp') | float(0) - 2) | round(1) }}"

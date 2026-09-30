@@ -1,0 +1,269 @@
+/* The page scrolls inside its cards, so the header and pagination stay put. */
+.db-page {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.db-inner {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.readonly-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.db-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.db-body.with-row {
+  grid-template-columns: 260px minmax(0, 1fr) 420px;
+}
+
+/* Table list */
+
+.db-tables {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.db-table {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease);
+}
+
+.db-table + .db-table {
+  margin-top: 2px;
+}
+
+.db-table:hover {
+  background: var(--panel-2);
+}
+
+.db-table.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.db-table-name {
+  font-weight: 600;
+}
+
+.db-table-count {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.db-table-about {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* Data card: table name, grid, pagination */
+
+.db-data {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.db-data-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.db-data-head h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.db-data-head p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.grid-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.grid {
+  border-collapse: collapse;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.grid td {
+  max-width: 320px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid tbody tr {
+  cursor: pointer;
+}
+
+.grid tbody tr:hover td {
+  background: var(--panel);
+}
+
+.grid tbody tr.on td {
+  background: var(--accent-soft);
+}
+
+.cell-null {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-style: italic;
+}
+
+.cell-num {
+  font-family: var(--mono);
+}
+
+.cell-json {
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.page-size {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+}
+
+.page-size .select {
+  width: auto;
+  height: 34px;
+  padding: 0 8px;
+}
+
+/* A segmented button group: rounded only on its outer ends. */
+.page-buttons {
+  display: flex;
+}
+
+.page-buttons .btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 0;
+  font-size: 14px;
+}
+
+.page-buttons .btn + .btn {
+  border-left: 0;
+}
+
+.page-buttons .btn:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.page-buttons .btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.flip {
+  transform: rotate(180deg);
+}
+
+/* Row details */
+
+.db-row {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.value-text {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .db-page {
+    overflow: auto;
+  }
+  .db-body,
+  .db-body.with-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .db-tables {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+  .db-table-about {
+    display: none;
+  }
+  .db-table {
+    width: auto;
+    flex: none;
+  }
+  .db-table + .db-table {
+    margin-top: 0;
+  }
+}

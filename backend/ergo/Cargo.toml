@@ -1,0 +1,30 @@
+[package]
+name = "ergo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+async-trait = "0.1.92"
+axum = "0.8.9"
+chrono = { version = "0.4.45", features = ["serde"] }
+chrono-tz = "0.10.4"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+croner = "4.0.0"
+ergo-core = { version = "0.1.0", path = "../ergo-core" }
+ergo-nodes = { version = "0.1.0", path = "../ergo-nodes" }
+futures-util = "0.3.34"
+reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+rumqttc = { version = "0.25.1", default-features = false }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tokio = { version = "1.53.1", features = ["full"] }
+tokio-stream = { version = "0.1.19", features = ["sync"] }
+tokio-tungstenite = "0.30.0"
+tower-http = { version = "0.7.1", features = ["trace", "cors"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2.5.8"
+uuid = { version = "1.26.1", features = ["v4", "serde"] }

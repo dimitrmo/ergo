@@ -1,0 +1,39 @@
+name: Ergo
+version: "0.1.0"
+slug: ergo
+description: Lightweight visual workflow builder. Real-time HA triggers, schedules, MQTT and more.
+url: https://github.com/dimitrmo/ergo
+arch:
+  - aarch64
+  - amd64
+# Public releases: HA pulls the prebuilt image for its architecture.
+# `make addon` removes this line so a local deploy builds on the device.
+image: ghcr.io/dimitrmo/{arch}-addon-ergo
+startup: application
+boot: auto
+
+# The UI and API are reachable only through HA Ingress: no ports are
+# published, and nginx inside the image rejects anything else.
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:sitemap
+panel_title: Ergo
+
+homeassistant_api: true
+services:
+  - mqtt:want
+
+# Liveness goes through nginx to the backend, so a dead nginx or a dead
+# backend both get the add-on restarted.
+watchdog: http://[HOST]:[PORT:8099]/health
+
+options:
+  log_level: info
+  run_retention_days: 7
+  run_retention_max: 1000
+  max_concurrent_runs: 20
+schema:
+  log_level: list(trace|debug|info|warn|error)
+  run_retention_days: int(1,365)
+  run_retention_max: int(100,100000)
+  max_concurrent_runs: int(1,200)

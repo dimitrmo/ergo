@@ -1,0 +1,129 @@
+/*
+ * The ergo mark: lifted off the page and, when animated, running.
+ *
+ * `er-logo` is the lift: a coloured drop shadow rather than a box shadow, so
+ * it follows the rounded silhouette. The rest plays one run per 2.4 s cycle:
+ *
+ *   0%        trigger fires
+ *   ~40%      packet passes the step, which lights
+ *   ~74-78%   packet lands, output ring pulses
+ *   rest      a beat of quiet before the next run
+ *
+ * The packet path uses pathLength=100 with a 16-unit dash and a 120-unit gap,
+ * so its head moves from 0 to 136 over the cycle. It starts hidden before the
+ * trigger and ends hidden past the output. The gap is longer than the path,
+ * so there's exactly one packet per run and no stray dash at either end.
+ *
+ * All of it stops under prefers-reduced-motion. The mark is fully legible
+ * static, so nothing is lost.
+ */
+
+.er-logo {
+    filter: drop-shadow(0 8px 22px hsl(38 100% 50% / 0.36));
+    transition: filter 0.4s ease, transform 0.4s ease;
+}
+
+.er-logo:hover {
+    filter: drop-shadow(0 8px 22px hsl(41 100% 55% / 0.45));
+    transform: translateY(-1px);
+}
+
+.er-animated .er-rail {
+    opacity: 0.6;
+}
+
+.er-trigger,
+.er-step,
+.er-output {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+@keyframes er-packet {
+    from {
+        stroke-dashoffset: 16;
+    }
+    to {
+        stroke-dashoffset: -120;
+    }
+}
+
+@keyframes er-fire {
+    0% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+    20%,
+    100% {
+        opacity: 0.75;
+        transform: scale(1);
+    }
+}
+
+@keyframes er-pass {
+    0%,
+    30% {
+        opacity: 0.75;
+        transform: scale(1);
+    }
+    40% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+    56%,
+    100% {
+        opacity: 0.75;
+        transform: scale(1);
+    }
+}
+
+@keyframes er-land {
+    0%,
+    68% {
+        opacity: 0.55;
+        transform: scale(1);
+    }
+    78% {
+        opacity: 1;
+        transform: scale(1.14);
+    }
+    94%,
+    100% {
+        opacity: 0.55;
+        transform: scale(1);
+    }
+}
+
+.er-animated .er-packet {
+    stroke-dasharray: 16 120;
+    animation: er-packet 2.4s linear infinite;
+}
+
+.er-animated .er-trigger {
+    animation: er-fire 2.4s ease-out infinite;
+}
+
+.er-animated .er-step {
+    animation: er-pass 2.4s ease-in-out infinite;
+}
+
+.er-animated .er-output {
+    animation: er-land 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .er-animated .er-packet,
+    .er-animated .er-trigger,
+    .er-animated .er-step,
+    .er-animated .er-output {
+        animation: none;
+    }
+
+    .er-animated .er-packet {
+        opacity: 0;
+    }
+
+    .er-animated .er-rail {
+        opacity: 1;
+    }
+}

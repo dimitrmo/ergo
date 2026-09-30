@@ -1,0 +1,22 @@
+# Local development: a throwaway Home Assistant and Mosquitto.
+# ergo itself runs natively (make dev) and connects to both.
+name: ergo-dev
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    ports:
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - ./ha-config:/config
+    environment:
+      TZ: Europe/Athens
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped

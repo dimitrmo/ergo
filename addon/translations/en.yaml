@@ -1,0 +1,13 @@
+configuration:
+  log_level:
+    name: Log level
+    description: How much ergo writes to the add-on log.
+  run_retention_days:
+    name: Keep runs for (days)
+    description: Run history older than this is deleted.
+  run_retention_max:
+    name: Maximum runs kept
+    description: The oldest runs are deleted beyond this count.
+  max_concurrent_runs:
+    name: Concurrent runs
+    description: Runs beyond this limit are skipped (and logged) until a slot frees up.
