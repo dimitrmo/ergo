@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.4
+
+### Changed
+
+- Inject version info UI
+
 ## 0.0.3
 
 ### Changed

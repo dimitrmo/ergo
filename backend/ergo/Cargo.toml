@@ -12,8 +12,8 @@ chrono = { version = "0.4.45", features = ["serde"] }
 chrono-tz = "0.10.4"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 croner = "4.0.0"
-ergo-core = { version = "0.0.3", path = "../ergo-core" }
-ergo-nodes = { version = "0.0.3", path = "../ergo-nodes" }
+ergo-core = { version = "0.0.4", path = "../ergo-core" }
+ergo-nodes = { version = "0.0.4", path = "../ergo-nodes" }
 futures-util = "0.3.34"
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 rumqttc = { version = "0.25.1", default-features = false }
