@@ -29,6 +29,11 @@ jobs:
           if [ "$tag" != "$config" ]; then
             echo "::error::tag $tag doesn't match addon/config.yaml version $config"; exit 1
           fi
+          cargo=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' backend/Cargo.toml)
+          npm=$(jq -r .version frontend/package.json)
+          if [ "$tag" != "$cargo" ] || [ "$tag" != "$npm" ]; then
+            echo "::error::tag $tag doesn't match backend ($cargo) and frontend ($npm); run make bump"; exit 1
+          fi
           if ! grep -q "^## $tag\$" addon/CHANGELOG.md; then
             echo "::error::addon/CHANGELOG.md has no '## $tag' section"; exit 1
           fi
