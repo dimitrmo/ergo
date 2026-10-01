@@ -81,8 +81,9 @@ and installs or rebuilds it there. The Pi only copies files, so the rebuild take
 
 ### Releases
 
-Set the version in `addon/config.yaml`, add a matching section to `addon/CHANGELOG.md`, then push
-a `vX.Y.Z` tag. GitHub Actions builds both architectures, pushes the images to GHCR and creates
+Run `make bump BUMP=patch|minor|major|X.Y.Z` to set the version of the backend, frontend and
+add-on, fill in the new section of `addon/CHANGELOG.md`, and merge to `master`. When CI passes on a
+version that has no `vX.Y.Z` tag yet, it pushes both images to GHCR, tags the commit and creates
 the GitHub release; Home Assistant then offers the update.
 
 ## Licence

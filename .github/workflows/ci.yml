@@ -1,5 +1,8 @@
 name: CI
 
+# Every push to master whose addon/config.yaml version has no vX.Y.Z tag yet
+# publishes it: both images go to GHCR, then master is tagged and the GitHub
+# release created, and HA shows "Update available". `make bump` sets the version.
 on:
   pull_request:
   push:
@@ -7,7 +10,8 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel master: that could stop a publish half-way.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -58,6 +62,34 @@ jobs:
         with:
           path: ./addon
 
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        run: |
+          version=$(sed -n 's/^version: "\(.*\)"/\1/p' addon/config.yaml)
+          cargo=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' backend/Cargo.toml)
+          npm=$(jq -r .version frontend/package.json)
+          if [ "$version" != "$cargo" ] || [ "$version" != "$npm" ]; then
+            echo "::error::versions differ: add-on $version, backend $cargo, frontend $npm; run make bump"; exit 1
+          fi
+          if ! grep -q "^## $version\$" addon/CHANGELOG.md; then
+            echo "::error::addon/CHANGELOG.md has no '## $version' section"; exit 1
+          fi
+          publish=false
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/master ] \
+            && [ -z "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+            publish=true
+          fi
+          echo "version $version, publish $publish"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
   release-build:
     name: Release build check
     needs: [backend, frontend]
@@ -94,3 +126,72 @@ jobs:
           name: ergo-aarch64
           path: build/addon-aarch64/bin/ergo-aarch64
           retention-days: 14
+
+  image:
+    name: Publish image (${{ matrix.arch }})
+    needs: [version, addon, release-build]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            platform: linux/arm64
+          - arch: amd64
+            platform: linux/amd64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: make addon ARCH=${{ matrix.arch }}
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.arch }}-addon-ergo" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v7
+        with:
+          context: build/addon-${{ matrix.arch }}
+          platforms: ${{ matrix.platform }}
+          build-args: BUILD_ARCH=${{ matrix.arch }}
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}:${{ needs.version.outputs.version }}
+            ${{ steps.name.outputs.image }}:latest
+          labels: |
+            io.hass.type=addon
+            io.hass.arch=${{ matrix.arch }}
+            io.hass.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+  github-release:
+    name: Tag and release
+    needs: [version, image]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Release notes from the changelog
+        run: |
+          awk -v v="## ${{ needs.version.outputs.version }}" '$0==v{f=1;next} /^## /{f=0} f' addon/CHANGELOG.md > notes.md
+      # Creates the vX.Y.Z tag on this master commit along with the release.
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          body_path: notes.md

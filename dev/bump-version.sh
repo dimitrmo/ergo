@@ -26,10 +26,10 @@ cargo update --manifest-path backend/Cargo.toml --workspace --offline --quiet
 # Frontend: package.json and package-lock.json.
 (cd frontend && npm version "$new" --no-git-tag-version --allow-same-version >/dev/null)
 
-# Add-on: the version HA shows, and the changelog section release.yml requires.
+# Add-on: the version HA shows, and the changelog section CI requires.
 sed -i "s/^version: \".*\"/version: \"$new\"/" addon/config.yaml
 if ! grep -q "^## $new\$" addon/CHANGELOG.md; then
   sed -i "0,/^## /s//## $new\n\n### Changed\n\n- \n\n## /" addon/CHANGELOG.md
 fi
 
-echo "$current -> $new; fill in the addon/CHANGELOG.md section, commit, then tag v$new"
+echo "$current -> $new; fill in the addon/CHANGELOG.md section, then merge to master; CI publishes and tags v$new"
