@@ -12,4 +12,4 @@
   the Mosquitto add-on.
 - Drafts and activated versions; test runs of the draft.
 - Run history with each node's input and output.
-- `/health` for the Supervisor watchdog and `/ready` for component status.
+- `/health` for the container healthcheck and `/ready` for component status.

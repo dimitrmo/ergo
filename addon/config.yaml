@@ -9,23 +9,16 @@ arch:
 # Public releases: HA pulls the prebuilt image for its architecture.
 # `make addon` removes this line so a local deploy builds on the device.
 image: ghcr.io/dimitrmo/{arch}-addon-ergo
-startup: application
-boot: auto
 
 # The UI and API are reachable only through HA Ingress: no ports are
 # published, and nginx inside the image rejects anything else.
 ingress: true
-ingress_port: 8099
 panel_icon: mdi:sitemap
 panel_title: Ergo
 
 homeassistant_api: true
 services:
   - mqtt:want
-
-# Liveness goes through nginx to the backend, so a dead nginx or a dead
-# backend both get the add-on restarted.
-watchdog: http://[HOST]:[PORT:8099]/health
 
 options:
   log_level: info
