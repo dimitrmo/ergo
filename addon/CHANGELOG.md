@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.3
+
+### Changed
+
+- Fix issue
+
 ## 0.0.2
 
 ### Changed

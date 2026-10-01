@@ -1,5 +1,5 @@
 name: Ergo
-version: "0.0.2"
+version: "0.0.3"
 slug: ergo
 description: Lightweight visual workflow builder. Real-time HA triggers, schedules, MQTT and more.
 url: https://github.com/dimitrmo/ergo
