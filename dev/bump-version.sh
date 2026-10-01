@@ -1,6 +1,9 @@
 #!/bin/sh
 # Set one version across the backend workspace, the frontend and the add-on,
-# and open a CHANGELOG section for it. Usage: bump-version.sh patch|minor|major|X.Y.Z
+# and open a CHANGELOG section for it. CI runs this for every release.
+# Usage: bump-version.sh patch|minor|major|X.Y.Z
+# CHANGELOG_NOTES may name a file of "- ..." lines for the new section (CI
+# passes the commit subjects); without it the section gets an empty bullet.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -21,7 +24,7 @@ esac
 # Backend: the workspace version, plus the version pins on path dependencies.
 sed -i "/^\[workspace.package\]/,/^\[/ s/^version = \".*\"/version = \"$new\"/" backend/Cargo.toml
 sed -i -E "s/^(ergo-[a-z]+ = \{ version = )\"[^\"]*\"/\1\"$new\"/" backend/*/Cargo.toml
-cargo update --manifest-path backend/Cargo.toml --workspace --offline --quiet
+cargo update --manifest-path backend/Cargo.toml --workspace --quiet
 
 # Frontend: package.json and package-lock.json.
 (cd frontend && npm version "$new" --no-git-tag-version --allow-same-version >/dev/null)
@@ -29,7 +32,12 @@ cargo update --manifest-path backend/Cargo.toml --workspace --offline --quiet
 # Add-on: the version HA shows, and the changelog section CI requires.
 sed -i "s/^version: \".*\"/version: \"$new\"/" addon/config.yaml
 if ! grep -q "^## $new\$" addon/CHANGELOG.md; then
-  sed -i "0,/^## /s//## $new\n\n### Changed\n\n- \n\n## /" addon/CHANGELOG.md
+  notes="${CHANGELOG_NOTES:-}"
+  if [ -z "$notes" ]; then notes=$(mktemp) && echo "- " > "$notes"; fi
+  awk -v v="$new" -v notes="$notes" '
+    /^## / && !done { print "## " v "\n\n### Changed\n"; while ((getline l < notes) > 0) print l; print ""; done = 1 }
+    { print }' addon/CHANGELOG.md > addon/CHANGELOG.md.new
+  mv addon/CHANGELOG.md.new addon/CHANGELOG.md
 fi
 
-echo "$current -> $new; fill in the addon/CHANGELOG.md section, then merge to master; CI publishes and tags v$new"
+echo "$current -> $new"

@@ -26,6 +26,9 @@ const NODE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // reqwest is built with `rustls-no-provider` (ergo-nodes picks ring for its
+    // own client), so every other client needs ring as the process default.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let cli = Cli::parse();
     let cfg = Config::resolve(&cli);
     tracing_subscriber::fmt()

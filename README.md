@@ -81,10 +81,12 @@ and installs or rebuilds it there. The Pi only copies files, so the rebuild take
 
 ### Releases
 
-Run `make bump BUMP=patch|minor|major|X.Y.Z` to set the version of the backend, frontend and
-add-on, fill in the new section of `addon/CHANGELOG.md`, and merge to `master`. When CI passes on a
-version that has no `vX.Y.Z` tag yet, it pushes both images to GHCR, tags the commit and creates
-the GitHub release; Home Assistant then offers the update.
+Every green push to `master` is released. CI bumps the version in `backend/Cargo.toml`,
+`frontend/package.json` and `addon/config.yaml` (patch by default; put `#minor` or `#major` in a
+commit message for a bigger bump), adds the commit subjects to `addon/CHANGELOG.md`, and commits
+all of it as `Release X.Y.Z [skip ci]`. It then pushes both images to GHCR, tags that commit
+`vX.Y.Z` and creates the GitHub release; Home Assistant then offers the update. Don't change
+the versions by hand.
 
 ## Licence
 

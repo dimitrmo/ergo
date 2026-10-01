@@ -14,7 +14,7 @@ TARGET         := $(TARGET_$(ARCH))
 -include .env
 export
 
-.PHONY: help dev-up dev-down dev-bootstrap dev-sidebar mqtt-watch dev ui-dev test lint ui binary addon image run-image deploy bump clean
+.PHONY: help dev-up dev-down dev-bootstrap dev-sidebar mqtt-watch dev ui-dev test lint ui binary addon image run-image deploy clean
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t 16
@@ -76,10 +76,6 @@ deploy: addon ## Copy the add-on to the Pi and (re)build it there
 	@test -n "$(DEPLOY_HOST)" || (echo "set ERGO_DEPLOY_HOST (e.g. root@homeassistant.local) in .env" && exit 1)
 	rsync -a --delete $(BUNDLE)/ $(DEPLOY_HOST):/addons/ergo/
 	ssh $(DEPLOY_HOST) 'sh -s' < dev/remote-deploy.sh
-
-bump: ## Bump the backend, frontend and add-on version (BUMP=patch|minor|major|X.Y.Z)
-	@test -n "$(BUMP)" || (echo "usage: make bump BUMP=patch|minor|major|X.Y.Z" && exit 1)
-	dev/bump-version.sh $(BUMP)
 
 clean: ## Remove build output
 	rm -rf build frontend/dist

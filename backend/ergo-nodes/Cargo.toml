@@ -7,7 +7,7 @@ license.workspace = true
 [dependencies]
 async-trait = "0.1.92"
 croner = "4.0.0"
-ergo-core = { version = "0.1.0", path = "../ergo-core" }
+ergo-core = { version = "0.0.0", path = "../ergo-core" }
 futures-util = "0.3.34"
 quick-xml = "0.42.0"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "stream", "form", "json"] }
