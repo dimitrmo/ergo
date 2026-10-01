@@ -276,3 +276,35 @@ fn validation_catches_structural_problems() {
 fn a_valid_chain_has_no_errors() {
     assert!(!has_errors(&validate(&chain(), &registry())));
 }
+
+#[test]
+fn unfinished_steps_block_going_live_but_not_a_test_run() {
+    let mut g = chain();
+    g.nodes[2].config = json!({});
+    let issues = validate(&g, &registry());
+    assert!(has_errors(&issues));
+    assert!(!blocks_test_run(&issues));
+
+    let mut broken = g.clone();
+    broken
+        .edges
+        .push(serde_json::from_value(json!({ "from": "b", "to": "a" })).unwrap());
+    assert!(blocks_test_run(&validate(&broken, &registry())));
+}
+
+#[tokio::test]
+async fn an_unfinished_step_fails_without_running() {
+    let mut g = chain();
+    g.nodes[2].config = json!({});
+    let sink = Arc::new(Recorder::default());
+    run(g, sink.clone()).await;
+    let nodes = sink.nodes.lock().unwrap();
+    assert!(
+        nodes[1].error.is_none(),
+        "the finished step before it still runs"
+    );
+    let err = nodes[2].error.as_ref().unwrap();
+    assert_eq!(err.kind, ErrorKind::Config);
+    assert_eq!(err.message, "this step isn't finished: Message is required");
+    assert!(nodes[2].logs.is_empty(), "it never ran");
+}

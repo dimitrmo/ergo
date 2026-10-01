@@ -8,10 +8,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ergo_core::{Graph, NodeKind, RunRequest, has_errors, validate};
-use serde::Deserialize;
+use ergo_core::{Graph, NodeKind, RunRequest, blocks_test_run, has_errors, validate};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::db::Db;
 use crate::ha::Ha;
@@ -71,6 +71,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/workflows/{id}/enable", post(enable))
         .route("/api/workflows/{id}/disable", post(disable))
         .route("/api/workflows/{id}/run", post(run_workflow))
+        .route("/api/export", get(export_workflows))
+        .route("/api/import", post(import_workflows))
         .route("/api/runs", get(list_runs))
         .route("/api/runs/{id}", get(get_run))
         .route("/api/nodes", get(nodes))
@@ -243,8 +245,9 @@ async fn run_workflow(
     let body = body.map(|b| b.0).unwrap_or_default();
     let wf = s.db.get_workflow(&id)?.ok_or_else(ApiError::not_found)?;
     let (version, graph) = if body.draft {
+        // Unfinished steps don't stop a test run; they fail if it reaches them.
         let issues = validate(&wf.draft, s.engine.registry());
-        if has_errors(&issues) {
+        if blocks_test_run(&issues) {
             return Err(ApiError(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 json!({ "error": "fix the errors before running", "issues": issues }),
@@ -309,6 +312,106 @@ async fn run_workflow(
         trigger,
     });
     Ok(Json(json!(outcome)))
+}
+
+/// The export file: workflows' names and drafts, to import into another ergo.
+#[derive(Serialize, Deserialize)]
+pub struct ExportFile {
+    pub format: String,
+    pub version: u32,
+    #[serde(default)]
+    pub exported_at: String,
+    #[serde(default)]
+    pub ergo_version: String,
+    pub workflows: Vec<ExportedWorkflow>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExportedWorkflow {
+    pub name: String,
+    pub draft: Graph,
+}
+
+const EXPORT_FORMAT: &str = "ergo.workflows";
+const EXPORT_VERSION: u32 = 1;
+
+impl ExportFile {
+    pub fn new(workflows: Vec<ExportedWorkflow>) -> Self {
+        Self {
+            format: EXPORT_FORMAT.into(),
+            version: EXPORT_VERSION,
+            exported_at: chrono::Utc::now().to_rfc3339(),
+            ergo_version: env!("CARGO_PKG_VERSION").into(),
+            workflows,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct ExportQuery {
+    /// Comma-separated workflow ids; all workflows when absent.
+    ids: Option<String>,
+}
+
+async fn export_workflows(State(s): AppStateRef, Query(q): Query<ExportQuery>) -> ApiResult {
+    let ids: Option<Vec<&str>> = q.ids.as_deref().map(|ids| ids.split(',').collect());
+    let workflows =
+        s.db.list_workflows()?
+            .into_iter()
+            .filter(|wf| ids.as_ref().is_none_or(|ids| ids.contains(&wf.id.as_str())))
+            .map(|wf| ExportedWorkflow {
+                name: wf.name,
+                draft: wf.draft,
+            })
+            .collect();
+    Ok(Json(json!(ExportFile::new(workflows))))
+}
+
+/// Adds every workflow in an export file as a new draft; nothing goes live
+/// until it is checked (entity ids may differ here) and activated.
+async fn import_workflows(
+    State(s): AppStateRef,
+    body: Result<Json<ExportFile>, axum::extract::rejection::JsonRejection>,
+) -> ApiResult {
+    let Json(file) = body.map_err(|e| {
+        warn!(error = %e.body_text(), "import rejected");
+        ApiError::bad(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "This isn't an ergo export file.",
+        )
+    })?;
+    if file.format != EXPORT_FORMAT {
+        return Err(ApiError::bad(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "This isn't an ergo export file.",
+        ));
+    }
+    if file.version > EXPORT_VERSION {
+        return Err(ApiError::bad(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "This file is from a newer ergo ({}); update this one first.",
+                file.ergo_version
+            ),
+        ));
+    }
+    let workflows: Vec<(String, Graph)> = file
+        .workflows
+        .into_iter()
+        .map(|wf| (wf.name.trim().to_string(), wf.draft))
+        .collect();
+    if workflows.iter().any(|(name, _)| name.is_empty()) {
+        return Err(ApiError::bad(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Every workflow in the file needs a name.",
+        ));
+    }
+    let created = s.db.import_workflows(&workflows)?;
+    let created: Vec<Value> = created
+        .into_iter()
+        .map(|(id, name)| json!({ "id": id, "name": name }))
+        .collect();
+    Ok(Json(json!({ "created": created })))
 }
 
 #[derive(Deserialize)]

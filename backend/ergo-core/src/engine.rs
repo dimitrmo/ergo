@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::model::Graph;
 use crate::node::{ErrorKind, NodeError, NodeKind, Registry, RunCtx};
 use crate::template::render_config_except;
+use crate::validate::step_problems;
 
 /// Stored step inputs and outputs are capped at this size.
 pub const MAX_STORED_BYTES: usize = 256 * 1024;
@@ -276,7 +277,15 @@ impl Engine {
                 .collect();
             let template_ctx =
                 json!({ "input": branch.input, "trigger": req.trigger, "steps": steps });
-            let config = if is_trigger {
+            // An unfinished step (possible in a test run of the draft) fails
+            // without running, rather than running with half its settings.
+            let problems = step_problems(&node.config, exec.as_ref());
+            let config = if !problems.is_empty() {
+                Err(NodeError::new(
+                    ErrorKind::Config,
+                    format!("this step isn't finished: {}", problems.join(", ")),
+                ))
+            } else if is_trigger {
                 Ok(node.config.clone())
             } else {
                 render_config_except(&node.config, &template_ctx, &raw)

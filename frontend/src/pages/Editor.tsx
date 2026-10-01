@@ -15,7 +15,7 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, api, type Issue, type Run, type RunDetail, type RunNode, type Workflow } from '../api.ts'
+import { ApiError, api, downloadExport, type Issue, type Run, type RunDetail, type RunNode, type Workflow } from '../api.ts'
 import { Confirm } from '../components/Confirm.tsx'
 import { Icon } from '../components/Icon.tsx'
 import { TopBar } from '../components/TopBar.tsx'
@@ -258,6 +258,8 @@ function EditorInner({ id }: { id: string }) {
       }
       loadRuns()
     } catch (e) {
+      // Nothing ran: don't let the run poll bring back an older run as if it were this one.
+      setFollow(false)
       if (e instanceof ApiError && e.issues.length) setIssues(e.issues)
       setToast({ kind: 'error', title: 'Almost there', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -272,6 +274,16 @@ function EditorInner({ id }: { id: string }) {
       window.location.hash = '#/'
     } catch (e) {
       setToast({ kind: 'error', title: "Couldn't delete it", text: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const exportThis = async () => {
+    if (!workflow) return
+    try {
+      await save()
+      downloadExport(await api.exportWorkflows([id]), workflow.name)
+    } catch (e) {
+      setToast({ kind: 'error', title: "Couldn't export it", text: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -406,6 +418,23 @@ function EditorInner({ id }: { id: string }) {
     return m
   }, [shown])
 
+  // Each step's config when the shown run came on screen. A step edited since
+  // then keeps its old result in the inspector but stops showing it as current.
+  const [runConfigs, setRunConfigs] = useState(new Map<string, string>())
+  const [configsFor, setConfigsFor] = useState<string | null>(null)
+  if (shown && shown.run.id !== configsFor) {
+    setConfigsFor(shown.run.id)
+    setRunConfigs(new Map(nodes.map((n) => [n.id, JSON.stringify(n.data.config)])))
+  }
+  const stale = useMemo(() => {
+    const s = new Set<string>()
+    for (const n of nodes) {
+      const was = runConfigs.get(n.id)
+      if (results.has(n.id) && was !== undefined && was !== JSON.stringify(n.data.config)) s.add(n.id)
+    }
+    return s
+  }, [nodes, runConfigs, results])
+
   const connected = useMemo(() => new Set(edges.map((e) => e.source)), [edges])
   const context = useMemo(
     () => ({
@@ -414,11 +443,12 @@ function EditorInner({ id }: { id: string }) {
       results,
       runKey: shown?.run.id ?? '',
       runShown: !!shown && shown.run.status !== 'running',
+      stale,
       issues: issuesByNode,
       connected,
       onAddAfter: (nodeId: string) => setChooser({ mode: 'step', after: nodeId }),
     }),
-    [schemas, entities, results, shown, issuesByNode, connected],
+    [schemas, entities, results, shown, stale, issuesByNode, connected],
   )
 
   const running = busy === 'run'
@@ -502,6 +532,11 @@ function EditorInner({ id }: { id: string }) {
             <button className="switch" role="switch" aria-checked={workflow.enabled} onClick={toggleEnabled} />
             <span>{workflow.enabled ? 'On' : 'Off'}</span>
           </label>
+        )}
+        {workflow && (
+          <button className="btn ghost icon" onClick={exportThis} aria-label="Export workflow" title="Download this workflow as a file">
+            <Icon name="download" size={18} />
+          </button>
         )}
         {workflow && (
           <button

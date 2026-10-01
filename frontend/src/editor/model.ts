@@ -20,6 +20,8 @@ export interface EditorContextValue {
   runKey: string
   /** A finished run is shown: steps without a record weren't reached. */
   runShown: boolean
+  /** Steps edited since the shown run, whose result no longer applies. */
+  stale: Set<string>
   issues: Map<string, Issue[]>
   /** Nodes with at least one outgoing connection. */
   connected: Set<string>
@@ -32,6 +34,7 @@ export const EditorContext = createContext<EditorContextValue>({
   results: new Map(),
   runKey: '',
   runShown: false,
+  stale: new Set(),
   issues: new Map(),
   connected: new Set(),
   onAddAfter: () => {},

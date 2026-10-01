@@ -23,10 +23,11 @@ function resultText(nodeType: string, r: RunNode): string {
 }
 
 export const FlowNode = memo(function FlowNode({ id, data, selected }: NodeProps<ErgoNode>) {
-  const { schemas, entities, results, runKey, runShown, issues, connected, onAddAfter } = useEditor()
+  const { schemas, entities, results, runKey, runShown, stale, issues, connected, onAddAfter } = useEditor()
   const schema = schemas.get(data.nodeType)
   const kind = schema?.kind ?? 'action'
-  const result = results.get(id)
+  const edited = stale.has(id)
+  const result = edited ? undefined : results.get(id)
   const hasError = (issues.get(id) ?? []).some((i) => i.severity === 'error')
   const ports = schema?.ports ?? ['out']
   const text = describeNode(data.nodeType, data.config, entities)
@@ -36,7 +37,7 @@ export const FlowNode = memo(function FlowNode({ id, data, selected }: NodeProps
     <div
       className={`step kind-${kind}${selected ? ' selected' : ''}${
         (hasError && !incomplete) || result?.error ? ' has-error' : ''
-      }${runShown && !result ? ' not-reached' : ''}${
+      }${runShown && !result && !edited ? ' not-reached' : ''}${
         incomplete || hasError ? ' incomplete' : ''
       }`}
     >
@@ -89,7 +90,12 @@ export const FlowNode = memo(function FlowNode({ id, data, selected }: NodeProps
           <span>{resultText(data.nodeType, result)}</span>
         </div>
       )}
-      {!result && runShown && (
+      {edited && (
+        <div key={runKey} className="step-result skipped">
+          <span>Edited since this run</span>
+        </div>
+      )}
+      {!result && !edited && runShown && (
         <div key={runKey} className="step-result skipped">
           <span>{kind === 'trigger' ? 'Not this run’s trigger' : 'Not reached in this run'}</span>
         </div>

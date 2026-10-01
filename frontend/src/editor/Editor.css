@@ -958,6 +958,11 @@
   margin: 0;
 }
 
+.inspector-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 .inspector-tabs {
   display: flex;
   gap: 2px;

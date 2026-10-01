@@ -184,6 +184,15 @@ export interface DbPage {
   limit: number
 }
 
+/** An export file: workflows' names and drafts, for Import on another ergo. */
+export interface ExportFile {
+  format: 'ergo.workflows'
+  version: number
+  exported_at: string
+  ergo_version: string
+  workflows: { name: string; draft: Graph }[]
+}
+
 export class ApiError extends Error {
   status: number
   issues: Issue[]
@@ -222,6 +231,10 @@ export const api = {
     call<WorkflowResponse>('POST', `api/workflows/${id}/${enabled ? 'enable' : 'disable'}`),
   run: (id: string, opts: { draft?: boolean; node?: string } = {}) =>
     call<StartOutcome>('POST', `api/workflows/${id}/run`, opts),
+  exportWorkflows: (ids?: string[]) =>
+    call<ExportFile>('GET', `api/export${ids ? `?ids=${ids.map(encodeURIComponent).join(',')}` : ''}`),
+  importWorkflows: (file: unknown) =>
+    call<{ created: { id: string; name: string }[] }>('POST', 'api/import', file),
   runs: (workflowId?: string, limit = 50) =>
     call<Run[]>('GET', `api/runs?limit=${limit}${workflowId ? `&workflow=${workflowId}` : ''}`),
   runDetail: (id: string) => call<RunDetail>('GET', `api/runs/${id}`),
@@ -233,6 +246,17 @@ export const api = {
     call<DbPage>('GET', `api/db/tables/${encodeURIComponent(table)}?offset=${offset}&limit=${limit}`),
   cronPreview: (cron: string) =>
     call<{ next: string[]; time_zone: string }>('POST', 'api/cron/preview', { cron }),
+}
+
+/** Saves an export file as a download, e.g. ergo-heater-2026-10-01.json. */
+export function downloadExport(file: ExportFile, label: string) {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workflows'
+  const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ergo-${slug}-${file.exported_at.slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export function emptyGraph(): Graph {

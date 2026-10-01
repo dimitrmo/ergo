@@ -69,7 +69,7 @@ pub enum Cmd {
     Migrate,
     /// Validate a workflow graph JSON file.
     Check { file: PathBuf },
-    /// Print every workflow's draft as JSON.
+    /// Print every workflow as an export file (the UI's Import reads it).
     Export,
 }
 

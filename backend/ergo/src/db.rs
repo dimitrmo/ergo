@@ -226,6 +226,36 @@ impl Db {
         Ok(())
     }
 
+    /// Creates each (name, draft) as a new workflow, in one transaction, and
+    /// returns their (id, name). A name already taken gets " (imported)".
+    pub fn import_workflows(&self, workflows: &[(String, Graph)]) -> Result<Vec<(String, String)>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let t = now();
+        let mut created = Vec::new();
+        for (name, draft) in workflows {
+            let taken: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM workflows WHERE name = ?1)",
+                [name],
+                |r| r.get(0),
+            )?;
+            let name = if taken {
+                format!("{name} (imported)")
+            } else {
+                name.clone()
+            };
+            let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+            tx.execute(
+                "INSERT INTO workflows (id, name, enabled, draft, created_at, updated_at)
+                 VALUES (?1, ?2, 1, ?3, ?4, ?4)",
+                params![id, name, json(draft), t],
+            )?;
+            created.push((id, name));
+        }
+        tx.commit()?;
+        Ok(created)
+    }
+
     /// Saves the draft and/or name. Returns false if the workflow doesn't exist.
     pub fn save_draft(&self, id: &str, name: Option<&str>, draft: Option<&Graph>) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
@@ -695,6 +725,27 @@ mod tests {
             Some(serde_json::json!({ "kind": "other", "message": "boom" }))
         );
         assert_eq!(nodes[0].attempts, serde_json::json!([]));
+    }
+
+    #[test]
+    fn import_creates_drafts_and_renames_clashes() {
+        let db = temp_db();
+        db.create_workflow("wf", "Lights", &Graph::default())
+            .unwrap();
+        let created = db
+            .import_workflows(&[
+                ("Lights".into(), Graph::default()),
+                ("Heater".into(), Graph::default()),
+            ])
+            .unwrap();
+        let names: Vec<_> = created.iter().map(|(_, n)| n.as_str()).collect();
+        assert_eq!(names, ["Lights (imported)", "Heater"]);
+        let wf = db.get_workflow(&created[1].0).unwrap().unwrap();
+        assert_eq!(
+            wf.active_version, None,
+            "imports are drafts until they go live"
+        );
+        assert_eq!(count(&db, "workflows"), 3);
     }
 
     #[test]

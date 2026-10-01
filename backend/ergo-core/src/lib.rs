@@ -15,7 +15,7 @@ pub use node::{
     ErrorKind, Field, FieldType, NodeError, NodeExecutor, NodeKind, NodeOutput, NodeSchema,
     Registry, RunCtx,
 };
-pub use validate::{Issue, Severity, has_errors, validate};
+pub use validate::{Issue, Severity, blocks_test_run, has_errors, step_problems, validate};
 
 #[cfg(test)]
 mod tests;

@@ -184,7 +184,7 @@ export function StepPanel({
   onDelete: () => void
   onClose: () => void
 }) {
-  const { schemas, issues, onAddAfter } = useEditor()
+  const { schemas, issues, stale, onAddAfter } = useEditor()
   const schema = schemas.get(node.data.nodeType)
   const problems = (issues.get(node.id) ?? []).filter((i) => i.severity === 'error')
 
@@ -208,7 +208,7 @@ export function StepPanel({
         )}
         <Form node={node} onChange={onChange} upstream={upstream} />
 
-        {result && <StepInspector result={result} />}
+        {result && <StepInspector result={result} edited={stale.has(node.id)} />}
       </div>
       <footer className="drawer-foot split">
         <button className="btn" onClick={() => onAddAfter(node.id)}>
@@ -237,7 +237,7 @@ const ERROR_KIND: Record<string, string> = {
 }
 
 /** What the step got, did and produced in the run shown on the canvas. */
-function StepInspector({ result }: { result: RunNode }) {
+function StepInspector({ result, edited }: { result: RunNode; edited: boolean }) {
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: 'input', label: 'Input', show: true },
     { id: 'config', label: 'Config', show: result.config !== null },
@@ -252,12 +252,13 @@ function StepInspector({ result }: { result: RunNode }) {
   return (
     <section className="inspector">
       <div className="inspector-head">
-        <span className="label">Last run of this step</span>
+        <span className="label">{edited ? 'Before your edits' : 'Last run of this step'}</span>
         <span className="faint">
           {result.port && !result.error ? `left by ${result.port} · ` : ''}
           {result.duration_ms} ms
         </span>
       </div>
+      {edited && <p className="faint inspector-note">You changed this step after this run. Try it to see the new result.</p>}
       <div className="inspector-tabs" role="tablist">
         {tabs
           .filter((t) => t.show)

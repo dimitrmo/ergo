@@ -340,6 +340,14 @@ a {
   font-size: 14px;
 }
 
+.notice {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 14px;
+}
+
 .issue.warning {
   background: rgb(255 214 10 / 0.1);
   color: #ffe27a;

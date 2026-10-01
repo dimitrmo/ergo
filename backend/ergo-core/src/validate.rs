@@ -6,7 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::model::Graph;
-use crate::node::{NodeKind, Registry};
+use crate::node::{NodeExecutor, NodeKind, Registry};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -23,6 +23,10 @@ pub struct Issue {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node: Option<String>,
     pub message: String,
+    /// A problem with one step's settings (rather than the graph's shape):
+    /// a test run still goes ahead, and that step fails if it is reached.
+    #[serde(skip)]
+    pub step_config: bool,
 }
 
 impl Issue {
@@ -31,6 +35,14 @@ impl Issue {
             severity: Severity::Error,
             node: node.map(str::to_string),
             message: message.into(),
+            step_config: false,
+        }
+    }
+
+    fn step_config(node: &str, message: String) -> Self {
+        Self {
+            step_config: true,
+            ..Self::error(Some(node), message)
         }
     }
 
@@ -39,12 +51,33 @@ impl Issue {
             severity: Severity::Warning,
             node: node.map(str::to_string),
             message: message.into(),
+            step_config: false,
         }
     }
 }
 
 pub fn has_errors(issues: &[Issue]) -> bool {
     issues.iter().any(|i| i.severity == Severity::Error)
+}
+
+/// Errors that stop even a test run: the graph's shape, not unfinished steps.
+pub fn blocks_test_run(issues: &[Issue]) -> bool {
+    issues
+        .iter()
+        .any(|i| i.severity == Severity::Error && !i.step_config)
+}
+
+/// What is missing or wrong in one step's settings.
+pub fn step_problems(config: &Value, exec: &dyn NodeExecutor) -> Vec<String> {
+    let mut problems: Vec<String> = exec
+        .schema()
+        .fields
+        .iter()
+        .filter(|f| f.required && is_empty(config.get(f.key)))
+        .map(|f| format!("{} is required", f.label))
+        .collect();
+    problems.extend(exec.validate(config));
+    problems
 }
 
 fn is_empty(value: Option<&Value>) -> bool {
@@ -70,17 +103,8 @@ pub fn validate(graph: &Graph, registry: &Registry) -> Vec<Issue> {
             ));
             continue;
         };
-        let schema = exec.schema();
-        for field in schema.fields.iter().filter(|f| f.required) {
-            if is_empty(node.config.get(field.key)) {
-                issues.push(Issue::error(
-                    Some(&node.id),
-                    format!("{} is required", field.label),
-                ));
-            }
-        }
-        for message in exec.validate(&node.config) {
-            issues.push(Issue::error(Some(&node.id), message));
+        for message in step_problems(&node.config, exec.as_ref()) {
+            issues.push(Issue::step_config(&node.id, message));
         }
     }
 

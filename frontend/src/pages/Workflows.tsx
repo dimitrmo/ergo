@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ago, api, type Workflow } from '../api.ts'
+import { useEffect, useRef, useState } from 'react'
+import { ago, api, downloadExport, type Workflow } from '../api.ts'
 import { Icon } from '../components/Icon.tsx'
 import { Confirm } from '../components/Confirm.tsx'
 import { PageHeader } from '../components/PageHeader.tsx'
@@ -56,7 +56,39 @@ export function Workflows() {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const entities = useEntities()
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const exportAll = async () => {
+    try {
+      downloadExport(await api.exportWorkflows(), 'workflows')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const importFile = async (file: File) => {
+    setError(null)
+    setNotice(null)
+    try {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(await file.text())
+      } catch {
+        throw new Error(`${file.name} isn't a JSON file.`)
+      }
+      const { created } = await api.importWorkflows(parsed)
+      setNotice(
+        created.length === 1
+          ? `Imported “${created[0].name}”. Check its steps, then go live.`
+          : `Imported ${created.length} workflows. Check their steps, then go live.`,
+      )
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const load = () =>
     api
@@ -125,9 +157,34 @@ export function Workflows() {
       <TopBar section="workflows" />
       <main className="page">
         <div className="page-inner">
-          <PageHeader title="Your workflows" subtitle="Something happens at home. Ergo, something gets done." />
+          <PageHeader
+            title="Your workflows"
+            subtitle="Something happens at home. Ergo, something gets done."
+            actions={
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="application/json,.json"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (file) importFile(file)
+                  }}
+                />
+                <button className="btn" onClick={() => fileInput.current?.click()} title="Add workflows from an ergo export file">
+                  <Icon name="upload" size={16} /> <span className="hide-narrow">Import</span>
+                </button>
+                <button className="btn" onClick={exportAll} disabled={!workflows?.length} title="Download every workflow as a file">
+                  <Icon name="download" size={16} /> <span className="hide-narrow">Export all</span>
+                </button>
+              </>
+            }
+          />
 
           {error && <div className="issue">{error}</div>}
+          {notice && <div className="notice">{notice}</div>}
 
           {workflows && (
             <div className="wf-grid">

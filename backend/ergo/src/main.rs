@@ -46,7 +46,18 @@ async fn main() -> Result<()> {
         Cmd::Check { file } => check(&file),
         Cmd::Export => {
             let db = Db::open(&cfg.data_dir)?;
-            println!("{}", serde_json::to_string_pretty(&db.list_workflows()?)?);
+            let workflows = db
+                .list_workflows()?
+                .into_iter()
+                .map(|wf| api::ExportedWorkflow {
+                    name: wf.name,
+                    draft: wf.draft,
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&api::ExportFile::new(workflows))?
+            );
             Ok(())
         }
     }
