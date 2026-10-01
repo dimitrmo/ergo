@@ -513,6 +513,12 @@ pre.json {
   text-decoration: none;
 }
 
+.topbar-version {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .topbar .brand svg {
   width: 24px;
   height: 24px;

@@ -34,6 +34,9 @@ export function TopBar({ left, section, children }: { left?: ReactNode; section?
       )}
       <div className="spacer" />
       {children}
+      <span className="topbar-version faint hide-narrow" title="ergo version">
+        v{__ERGO_VERSION__}
+      </span>
     </header>
   )
 }

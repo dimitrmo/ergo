@@ -21,8 +21,6 @@ export function StatusBar({ ready }: { ready: Ready | null }) {
         <span className={`dot ${!mqtt.configured ? '' : mqtt.connected ? 'ok' : 'err'}`} />
         {!mqtt.configured ? 'No MQTT broker' : mqtt.connected ? 'MQTT connected' : 'MQTT offline'}
       </a>
-      <span className="spacer" />
-      <span className="item faint hide-narrow">ergo {ready.version}</span>
     </footer>
   )
 }
