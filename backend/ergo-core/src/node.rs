@@ -303,12 +303,29 @@ pub trait NodeExecutor: Send + Sync {
 #[derive(Default, Clone)]
 pub struct Registry {
     nodes: HashMap<&'static str, Arc<dyn NodeExecutor>>,
+    /// Node types turned off by configuration, with why; workflows that
+    /// still use them get this as their error.
+    disabled: HashMap<&'static str, &'static str>,
 }
 
 impl Registry {
     pub fn register(&mut self, node: impl NodeExecutor + 'static) {
         let schema = node.schema();
         self.nodes.insert(schema.node_type, Arc::new(node));
+    }
+
+    /// Leaves `node_type` out, explaining it with `reason`.
+    pub fn disable(&mut self, node_type: &'static str, reason: &'static str) {
+        self.nodes.remove(node_type);
+        self.disabled.insert(node_type, reason);
+    }
+
+    /// Why a node type can't be used: turned off, or unknown.
+    pub fn unavailable(&self, node_type: &str) -> String {
+        match self.disabled.get(node_type) {
+            Some(reason) => (*reason).to_string(),
+            None => format!("unknown node type `{node_type}`"),
+        }
     }
 
     pub fn get(&self, node_type: &str) -> Option<&Arc<dyn NodeExecutor>> {

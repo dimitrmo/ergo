@@ -17,10 +17,12 @@ export function StatusBar({ ready }: { ready: Ready | null }) {
         <span className={`dot ${ha.ok ? 'ok' : 'err'}`} />
         {ha.ok ? 'Home Assistant connected' : 'Home Assistant offline'}
       </a>
-      <a className="item" href="#/status" title={mqtt.error ?? undefined}>
-        <span className={`dot ${!mqtt.configured ? '' : mqtt.connected ? 'ok' : 'err'}`} />
-        {!mqtt.configured ? 'No MQTT broker' : mqtt.connected ? 'MQTT connected' : 'MQTT offline'}
-      </a>
+      {mqtt.enabled && (
+        <a className="item" href="#/status" title={mqtt.error ?? undefined}>
+          <span className={`dot ${mqtt.connected ? 'ok' : 'err'}`} />
+          {mqtt.connected ? 'MQTT connected' : 'MQTT offline'}
+        </a>
+      )}
     </footer>
   )
 }

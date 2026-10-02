@@ -260,7 +260,7 @@ impl Engine {
             let Some(exec) = self.registry.get(&node.kind) else {
                 return (
                     RunStatus::Failed,
-                    Some(format!("unknown node type {}", node.kind)),
+                    Some(self.registry.unavailable(&node.kind)),
                 );
             };
 

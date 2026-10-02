@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useMqttEnabled } from '../hooks.ts'
 import { ErgoLogo } from './ErgoLogo.tsx'
 
 // Inside Home Assistant (Ingress panel or a Webpage dashboard) HA already
@@ -14,6 +15,7 @@ const SECTIONS: { id: Section; label: string; href: string }[] = [
 ]
 
 export function TopBar({ left, section, children }: { left?: ReactNode; section?: Section; children?: ReactNode }) {
+  const mqtt = useMqttEnabled()
   return (
     <header className="topbar">
       {left ?? (
@@ -25,7 +27,7 @@ export function TopBar({ left, section, children }: { left?: ReactNode; section?
             </a>
           )}
           <nav className="sections" aria-label="Sections">
-            {SECTIONS.map((s) => (
+            {SECTIONS.filter((s) => s.id !== 'mqtt' || mqtt).map((s) => (
               <a key={s.id} href={s.href} className={`section-tab${section === s.id ? ' on' : ''}`} aria-current={section === s.id ? 'page' : undefined}>
                 {s.label}
               </a>

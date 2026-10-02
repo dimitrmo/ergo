@@ -33,17 +33,26 @@ export function Status({ ready }: { ready: Ready | null }) {
                   : (ready.checks.ha_websocket.error ?? 'Disconnected')
               }
             />
-            <Row
-              ok={ready.checks.mqtt.configured ? ready.checks.mqtt.connected : null}
-              name="MQTT"
-              detail={
-                !ready.checks.mqtt.configured
-                  ? 'No broker configured. Install the Mosquitto add-on or set ERGO_MQTT_URL.'
-                  : ready.checks.mqtt.connected
+            {ready.checks.mqtt.enabled ? (
+              <Row
+                ok={ready.checks.mqtt.connected}
+                name="MQTT"
+                detail={
+                  ready.checks.mqtt.connected
                     ? `Connected to ${ready.checks.mqtt.broker}`
                     : (ready.checks.mqtt.error ?? 'Disconnected')
-              }
-            />
+                }
+              />
+            ) : (
+              // Off on purpose shows nothing; off because the setting failed says why.
+              ready.checks.mqtt.error && (
+                <Row
+                  ok={false}
+                  name="MQTT"
+                  detail={`Off: ${ready.checks.mqtt.error}. Fix the add-on's mqtt_url option, then restart ergo.`}
+                />
+              )
+            )}
             <Row
               ok={ready.checks.database.ok}
               name="Database"

@@ -23,7 +23,11 @@ pub struct AppState {
     pub db: Arc<Db>,
     pub engine: Arc<Engine>,
     pub ha: Arc<Ha>,
-    pub mqtt: Arc<Mqtt>,
+    /// None when MQTT is turned off.
+    pub mqtt: Option<Arc<Mqtt>>,
+    /// Why MQTT is off although `mqtt_url` asks for it (bad setting, or the
+    /// broker couldn't be reached at startup).
+    pub mqtt_error: Option<String>,
     pub triggers: Arc<Triggers>,
     pub started: Instant,
     /// Run history limits: (days, max runs).
@@ -94,10 +98,11 @@ async fn health() -> Json<Value> {
 
 async fn ready(State(s): AppStateRef) -> Response {
     let ha = s.ha.status();
-    let mqtt = s.mqtt.status();
+    let mqtt = s.mqtt.as_ref().map(|m| m.status());
     let db = s.db.ping();
     // MQTT is optional: only a configured-but-down broker degrades readiness.
-    let ok = ha.connected && db.is_ok() && (!mqtt.configured || mqtt.connected);
+    let mqtt_ok = s.mqtt_error.is_none() && mqtt.as_ref().is_none_or(|m| m.connected);
+    let ok = ha.connected && db.is_ok() && mqtt_ok;
     let body = json!({
         "status": if ok { "ok" } else { "degraded" },
         "version": env!("CARGO_PKG_VERSION"),
@@ -110,11 +115,12 @@ async fn ready(State(s): AppStateRef) -> Response {
                 "ha_version": ha.version,
             },
             "mqtt": {
-                "ok": !mqtt.configured || mqtt.connected,
-                "configured": mqtt.configured,
-                "connected": mqtt.connected,
-                "broker": mqtt.broker,
-                "error": mqtt.error,
+                "ok": mqtt_ok,
+                "enabled": mqtt.is_some(),
+                "configured": mqtt.as_ref().is_some_and(|m| m.configured),
+                "connected": mqtt.as_ref().is_some_and(|m| m.connected),
+                "broker": mqtt.as_ref().and_then(|m| m.broker.clone()),
+                "error": s.mqtt_error.clone().or_else(|| mqtt.as_ref().and_then(|m| m.error.clone())),
             },
             "database": { "ok": db.is_ok(), "error": db.err().map(|e| e.to_string()) },
             "scheduler": { "ok": true, "time_zone": s.triggers.time_zone().name() },
@@ -492,6 +498,11 @@ async fn db_rows(
 }
 
 // MQTT monitor: what ergo published, and what arrives on a watched filter.
+// With MQTT turned off, these answer 404.
+
+fn mqtt(s: &AppState) -> Result<&Arc<Mqtt>, ApiError> {
+    s.mqtt.as_ref().ok_or_else(ApiError::not_found)
+}
 
 #[derive(Deserialize)]
 struct MessagesQuery {
@@ -499,11 +510,11 @@ struct MessagesQuery {
 }
 
 async fn mqtt_messages(State(s): AppStateRef, Query(q): Query<MessagesQuery>) -> ApiResult {
-    Ok(Json(json!(s.mqtt.messages(q.after.unwrap_or(0)))))
+    Ok(Json(json!(mqtt(&s)?.messages(q.after.unwrap_or(0)))))
 }
 
 async fn mqtt_clear(State(s): AppStateRef) -> ApiResult {
-    s.mqtt.clear();
+    mqtt(&s)?.clear();
     Ok(Json(json!({ "cleared": true })))
 }
 
@@ -518,7 +529,7 @@ async fn mqtt_watch(State(s): AppStateRef, Json(body): Json<WatchBody>) -> ApiRe
         .filter
         .map(|f| f.trim().to_string())
         .filter(|f| !f.is_empty());
-    s.mqtt
+    mqtt(&s)?
         .watch(filter.clone())
         .await
         .map_err(|e| ApiError::bad(StatusCode::UNPROCESSABLE_ENTITY, e))?;

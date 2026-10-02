@@ -22,11 +22,13 @@ services:
 
 options:
   log_level: info
+  mqtt_url: auto
   run_retention_days: 7
   run_retention_max: 1000
   max_concurrent_runs: 20
 schema:
   log_level: list(trace|debug|info|warn|error)
+  mqtt_url: str?
   run_retention_days: int(1,365)
   run_retention_max: int(100,100000)
   max_concurrent_runs: int(1,200)

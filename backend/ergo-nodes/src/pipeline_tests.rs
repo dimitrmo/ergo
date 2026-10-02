@@ -284,7 +284,7 @@ async fn the_rss_pipeline_from_the_doc() {
     let dir = std::env::temp_dir().join(format!("ergo-pipe-{}", uuid::Uuid::new_v4()));
     let sink = Arc::new(Sink::default());
     let engine = Engine::new(
-        Arc::new(registry(Arc::new(NoMqtt))),
+        Arc::new(registry(Some(Arc::new(NoMqtt)))),
         sink.clone(),
         4,
         Duration::from_secs(10),

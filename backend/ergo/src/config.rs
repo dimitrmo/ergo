@@ -27,7 +27,9 @@ pub struct Cli {
     #[arg(long, env = "ERGO_HA_TOKEN", hide_env_values = true)]
     pub ha_token: Option<String>,
 
-    /// MQTT broker, e.g. mqtt://user:pass@localhost:1883. Default: Supervisor discovery.
+    /// MQTT broker: `auto` (the broker the Supervisor knows, e.g. the
+    /// Mosquitto add-on), a URL such as mqtt://user:pass@localhost:1883, or
+    /// `off`. Unset means off, and ergo shows nothing MQTT.
     #[arg(long, env = "ERGO_MQTT_URL", hide_env_values = true)]
     pub mqtt_url: Option<String>,
 
@@ -77,9 +79,32 @@ pub enum Cmd {
 #[derive(Debug, Default, Deserialize)]
 struct AddonOptions {
     log_level: Option<String>,
+    mqtt_url: Option<String>,
     run_retention_days: Option<u32>,
     run_retention_max: Option<u32>,
     max_concurrent_runs: Option<usize>,
+}
+
+/// Whether ergo uses MQTT, and which broker.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MqttSetting {
+    /// Everything MQTT is hidden: the publish step, the MQTT page, the status.
+    Off,
+    /// The broker the Supervisor reports (the Mosquitto add-on).
+    Auto,
+    Url(String),
+}
+
+impl MqttSetting {
+    /// `auto`, `off` (or empty), or a broker URL; unset means off.
+    pub fn parse(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            None | Some("") => Self::Off,
+            Some(v) if v.eq_ignore_ascii_case("off") => Self::Off,
+            Some(v) if v.eq_ignore_ascii_case("auto") => Self::Auto,
+            Some(v) => Self::Url(v.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -87,7 +112,7 @@ pub struct Config {
     pub addon: bool,
     pub ha_url: String,
     pub ha_token: Option<String>,
-    pub mqtt_url: Option<String>,
+    pub mqtt: MqttSetting,
     pub supervisor_token: Option<String>,
     pub data_dir: PathBuf,
     pub bind: SocketAddr,
@@ -127,7 +152,7 @@ impl Config {
                 .ha_token
                 .clone()
                 .or_else(|| cli.supervisor_token.clone()),
-            mqtt_url: cli.mqtt_url.clone(),
+            mqtt: MqttSetting::parse(cli.mqtt_url.as_deref().or(opts.mqtt_url.as_deref())),
             supervisor_token: cli.supervisor_token.clone(),
             bind: cli
                 .bind
@@ -152,5 +177,22 @@ impl Config {
                 .unwrap_or(1000),
             data_dir,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MqttSetting;
+
+    #[test]
+    fn parses_the_mqtt_setting() {
+        assert_eq!(MqttSetting::parse(None), MqttSetting::Off);
+        assert_eq!(MqttSetting::parse(Some(" ")), MqttSetting::Off);
+        assert_eq!(MqttSetting::parse(Some("OFF")), MqttSetting::Off);
+        assert_eq!(MqttSetting::parse(Some("auto")), MqttSetting::Auto);
+        assert_eq!(
+            MqttSetting::parse(Some("mqtt://h:1883")),
+            MqttSetting::Url("mqtt://h:1883".into())
+        );
     }
 }

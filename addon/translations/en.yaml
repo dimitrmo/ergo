@@ -2,6 +2,12 @@ configuration:
   log_level:
     name: Log level
     description: How much ergo writes to the add-on log.
+  mqtt_url:
+    name: MQTT broker
+    description: >-
+      "auto" uses the Mosquitto add-on, a URL such as mqtt://user:pass@host:1883
+      uses that broker, and "off" turns MQTT off. MQTT is turned on only if ergo
+      can connect when it starts.
   run_retention_days:
     name: Keep runs for (days)
     description: Run history older than this is deleted.

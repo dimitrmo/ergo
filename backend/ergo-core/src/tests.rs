@@ -273,6 +273,25 @@ fn validation_catches_structural_problems() {
 }
 
 #[test]
+fn disabled_node_types_explain_themselves() {
+    let mut r = (*registry()).clone();
+    r.disable("test.echo", "echo is turned off");
+    let g = graph(json!({
+        "nodes": [
+            { "id": "t", "type": "test.trigger", "config": {} },
+            { "id": "a", "type": "test.echo", "config": { "message": "hi" } }
+        ],
+        "edges": [{ "from": "t", "to": "a" }]
+    }));
+    let issues = validate(&g, &r);
+    assert!(r.get("test.echo").is_none());
+    assert!(
+        issues.iter().any(|i| i.message == "echo is turned off"),
+        "{issues:?}"
+    );
+}
+
+#[test]
 fn a_valid_chain_has_no_errors() {
     assert!(!has_errors(&validate(&chain(), &registry())));
 }

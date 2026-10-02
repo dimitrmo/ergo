@@ -99,7 +99,7 @@ pub fn validate(graph: &Graph, registry: &Registry) -> Vec<Issue> {
         let Some(exec) = registry.get(&node.kind) else {
             issues.push(Issue::error(
                 Some(&node.id),
-                format!("unknown node type `{}`", node.kind),
+                registry.unavailable(&node.kind),
             ));
             continue;
         };

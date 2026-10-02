@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { api, type Entity, type NodeSchema, type Ready } from './api.ts'
+
+/** The latest /ready, shared from App so any component can read it. */
+export const ReadyContext = createContext<Ready | null>(null)
+
+/** Whether MQTT is on; the MQTT step, page and status show only then. */
+export function useMqttEnabled(): boolean {
+  return useContext(ReadyContext)?.checks.mqtt.enabled ?? false
+}
 
 /** Polls /ready every 5 s for the status bar. */
 export function useReady(): Ready | null {

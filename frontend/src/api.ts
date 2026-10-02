@@ -157,7 +157,8 @@ export interface Ready {
   uptime_s: number
   checks: {
     ha_websocket: { ok: boolean; error: string | null; last_event_at: string | null; ha_version: string | null }
-    mqtt: { ok: boolean; configured: boolean; connected: boolean; broker: string | null; error: string | null }
+    /** `enabled` is false when MQTT is off; `error` then says why, if it was asked for. */
+    mqtt: { ok: boolean; enabled: boolean; configured: boolean; connected: boolean; broker: string | null; error: string | null }
     database: { ok: boolean; error: string | null }
     scheduler: { ok: boolean; time_zone: string }
   }

@@ -40,12 +40,20 @@ pub trait MqttPublisher: Send + Sync {
     ) -> Result<(), String>;
 }
 
-pub fn registry(mqtt: Arc<dyn MqttPublisher>) -> Registry {
+/// Every node type. Without `mqtt` (MQTT turned off), `mqtt.publish` is left
+/// out and workflows that use it are told why.
+pub fn registry(mqtt: Option<Arc<dyn MqttPublisher>>) -> Registry {
     let mut r = Registry::default();
     r.register(StateTrigger);
     r.register(CronTrigger);
     r.register(ManualTrigger);
-    r.register(MqttPublish { mqtt });
+    match mqtt {
+        Some(mqtt) => r.register(MqttPublish { mqtt }),
+        None => r.disable(
+            "mqtt.publish",
+            "MQTT is off. Check the add-on's mqtt_url option; the Status page says why.",
+        ),
+    }
     r.register(TextCompose);
     r.register(HttpDownload::new());
     r.register(HttpRequest::new());

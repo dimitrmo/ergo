@@ -1,8 +1,8 @@
 //! MQTT broker connection used by `mqtt.publish`.
 //!
-//! The broker comes from `ERGO_MQTT_URL`, or, as an add-on, from the
-//! Supervisor's service discovery (the Mosquitto add-on). No broker is fine:
-//! ergo still runs, and publish nodes fail with a clear error.
+//! The broker comes from the `mqtt_url` option: a URL, or `auto` for the
+//! Supervisor's service discovery (the Mosquitto add-on). MQTT is turned on
+//! only once ergo has connected to it; otherwise ergo runs without MQTT.
 //!
 //! For the MQTT page, the last messages ergo published are kept in memory,
 //! together with what arrives on a topic filter the page is watching.
@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use ergo_nodes::MqttPublisher;
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
+use rumqttc::{AsyncClient, ConnectionError, Event, MqttOptions, Packet, QoS};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, warn};
@@ -197,8 +197,11 @@ impl Mqtt {
         })
     }
 
-    /// Creates the client and drives its event loop in the background.
-    pub fn connect(broker: Broker) -> Arc<Self> {
+    /// Connects to `broker`, waiting up to `wait` for it to accept, and then
+    /// keeps the connection up in the background (reconnecting as needed).
+    /// Fails if the broker can't be reached in time or turns the login down,
+    /// so MQTT is only turned on with a broker that works.
+    pub async fn connect(broker: Broker, wait: Duration) -> Result<Arc<Self>, String> {
         let mut opts = MqttOptions::new(
             format!("ergo-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]),
             broker.host.clone(),
@@ -217,8 +220,10 @@ impl Mqtt {
             monitor: Mutex::default(),
         });
 
+        let refused = Arc::new(AtomicBool::new(false));
         let this = mqtt.clone();
-        tokio::spawn(async move {
+        let refused_flag = refused.clone();
+        let event_loop = tokio::spawn(async move {
             loop {
                 match eventloop.poll().await {
                     Ok(Event::Incoming(Packet::ConnAck(_))) => {
@@ -242,6 +247,9 @@ impl Mqtt {
                     }
                     Ok(_) => {}
                     Err(e) => {
+                        if matches!(e, ConnectionError::ConnectionRefused(_)) {
+                            refused_flag.store(true, Ordering::Relaxed);
+                        }
                         if this.connected.swap(false, Ordering::Relaxed) {
                             warn!(error = %e, "MQTT connection lost");
                         }
@@ -252,6 +260,26 @@ impl Mqtt {
                 }
             }
         });
+
+        let deadline = Instant::now() + wait;
+        while !mqtt.connected.load(Ordering::Relaxed) {
+            if refused.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                event_loop.abort();
+                let error = mqtt.error.read().unwrap().clone();
+                return Err(match error {
+                    Some(e) => format!(
+                        "couldn't connect to {}: {e}",
+                        mqtt.broker.as_deref().unwrap_or("?")
+                    ),
+                    None => format!(
+                        "{} didn't answer within {} s",
+                        mqtt.broker.as_deref().unwrap_or("the broker"),
+                        wait.as_secs()
+                    ),
+                });
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
 
         // Stops a watch the page left behind (closed tab, lost connection).
         let this = mqtt.clone();
@@ -269,7 +297,7 @@ impl Mqtt {
                 }
             }
         });
-        mqtt
+        Ok(mqtt)
     }
 
     /// Messages after `after`; also keeps the current watch alive.

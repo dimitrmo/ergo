@@ -16,7 +16,7 @@ use tower_http::trace::TraceLayer;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
-use crate::config::{Cli, Cmd, Config};
+use crate::config::{Cli, Cmd, Config, MqttSetting};
 use crate::db::Db;
 use crate::ha::Ha;
 use crate::mqtt::{Broker, Mqtt};
@@ -68,7 +68,8 @@ fn check(file: &std::path::Path) -> Result<()> {
     let text =
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let graph: Graph = serde_json::from_str(&text).context("parsing workflow JSON")?;
-    let registry = ergo_nodes::registry(Mqtt::disabled(None));
+    // Checks every step type, MQTT included, whatever this install's options.
+    let registry = ergo_nodes::registry(Some(Mqtt::disabled(None)));
     let issues = validate(&graph, &registry);
     for issue in &issues {
         println!(
@@ -85,24 +86,43 @@ fn check(file: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-async fn connect_mqtt(cfg: &Config) -> Arc<Mqtt> {
-    if let Some(url) = &cfg.mqtt_url {
-        return match Broker::parse(url) {
-            Ok(b) => Mqtt::connect(b),
-            Err(e) => {
-                warn!(error = %e, "MQTT disabled");
-                Mqtt::disabled(Some(e.to_string()))
-            }
-        };
-    }
-    if let Some(token) = &cfg.supervisor_token {
-        match Broker::discover(token).await {
-            Ok(Some(b)) => return Mqtt::connect(b),
-            Ok(None) => info!("no MQTT service found via the Supervisor"),
-            Err(e) => warn!(error = %e, "MQTT discovery failed"),
+/// How long startup waits for the broker. It covers a broker that starts
+/// alongside ergo, and stays well inside the container healthcheck's grace.
+const MQTT_CONNECT_WAIT: Duration = Duration::from_secs(20);
+
+/// Connects to the broker `mqtt_url` names, checking the setting first.
+/// MQTT is turned on only with a working connection; otherwise this returns
+/// None and, unless MQTT was turned off on purpose, why.
+async fn connect_mqtt(cfg: &Config) -> (Option<Arc<Mqtt>>, Option<String>) {
+    let broker = match &cfg.mqtt {
+        MqttSetting::Off => {
+            info!("MQTT is turned off");
+            return (None, None);
+        }
+        MqttSetting::Url(url) => Broker::parse(url).map_err(|e| e.to_string()),
+        MqttSetting::Auto => match &cfg.supervisor_token {
+            None => Err("mqtt_url is auto, but only the add-on can look up a broker; set a broker URL".into()),
+            Some(token) => match Broker::discover(token).await {
+                Ok(Some(b)) => Ok(b),
+                Ok(None) => Err(
+                    "no MQTT broker found; install the Mosquitto add-on or set mqtt_url to a broker URL"
+                        .into(),
+                ),
+                Err(e) => Err(format!("looking up the MQTT broker failed: {e}")),
+            },
+        },
+    };
+    let result = match broker {
+        Ok(b) => Mqtt::connect(b, MQTT_CONNECT_WAIT).await,
+        Err(e) => Err(e),
+    };
+    match result {
+        Ok(mqtt) => (Some(mqtt), None),
+        Err(e) => {
+            error!(error = %e, "MQTT stays off; fix mqtt_url and restart ergo");
+            (None, Some(e))
         }
     }
-    Mqtt::disabled(None)
 }
 
 async fn serve(cfg: Config) -> Result<()> {
@@ -124,8 +144,11 @@ async fn serve(cfg: Config) -> Result<()> {
     let (ha, ha_commands) = Ha::new(&cfg.ha_url, cfg.ha_token.clone())?;
     tokio::spawn(ha.clone().run(ha_commands));
 
-    let mqtt = connect_mqtt(&cfg).await;
-    let registry = Arc::new(ergo_nodes::registry(mqtt.clone()));
+    let (mqtt, mqtt_error) = connect_mqtt(&cfg).await;
+    let registry = Arc::new(ergo_nodes::registry(
+        mqtt.clone()
+            .map(|m| m as Arc<dyn ergo_nodes::MqttPublisher>),
+    ));
     // Large downloads go to <data>/tmp; each run's files are deleted when it ends.
     let engine = Engine::new(registry, db.clone(), cfg.max_concurrent_runs, NODE_TIMEOUT)
         .with_temp_dir(cfg.data_dir.join("tmp"));
@@ -158,6 +181,7 @@ async fn serve(cfg: Config) -> Result<()> {
         engine,
         ha,
         mqtt,
+        mqtt_error,
         triggers,
         started: Instant::now(),
         retention: (days, max),

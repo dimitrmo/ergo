@@ -47,7 +47,7 @@ export const FlowNode = memo(function FlowNode({ id, data, selected }: NodeProps
       </span>
       <div className="step-body">
         <div className="step-kicker">
-          {kind === 'trigger' ? 'When' : 'Then'} · {data.label || schema?.title}
+          {kind === 'trigger' ? 'When' : 'Then'} · {data.label || schema?.title || data.nodeType}
         </div>
         <div className="step-text">{text}</div>
       </div>
