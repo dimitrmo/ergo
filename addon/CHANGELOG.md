@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.8
+
+### Changed
+
+- Format issue fix
+- New enhancements
+
 ## 0.0.7
 
 ### Changed
