@@ -80,6 +80,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/cron/preview", post(cron_preview))
         .route("/api/db/tables", get(db_tables))
         .route("/api/db/tables/{name}", get(db_rows))
+        .route("/api/mqtt/messages", get(mqtt_messages).delete(mqtt_clear))
+        .route("/api/mqtt/watch", post(mqtt_watch))
         .with_state(state)
 }
 
@@ -479,4 +481,38 @@ async fn db_rows(
         s.db.browse_rows(&name, offset, limit)?
             .ok_or_else(ApiError::not_found)?;
     Ok(Json(json!(page)))
+}
+
+// MQTT monitor: what ergo published, and what arrives on a watched filter.
+
+#[derive(Deserialize)]
+struct MessagesQuery {
+    after: Option<u64>,
+}
+
+async fn mqtt_messages(State(s): AppStateRef, Query(q): Query<MessagesQuery>) -> ApiResult {
+    Ok(Json(json!(s.mqtt.messages(q.after.unwrap_or(0)))))
+}
+
+async fn mqtt_clear(State(s): AppStateRef) -> ApiResult {
+    s.mqtt.clear();
+    Ok(Json(json!({ "cleared": true })))
+}
+
+#[derive(Deserialize)]
+struct WatchBody {
+    /// A topic filter such as `home/#`; null stops watching.
+    filter: Option<String>,
+}
+
+async fn mqtt_watch(State(s): AppStateRef, Json(body): Json<WatchBody>) -> ApiResult {
+    let filter = body
+        .filter
+        .map(|f| f.trim().to_string())
+        .filter(|f| !f.is_empty());
+    s.mqtt
+        .watch(filter.clone())
+        .await
+        .map_err(|e| ApiError::bad(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    Ok(Json(json!({ "filter": filter })))
 }

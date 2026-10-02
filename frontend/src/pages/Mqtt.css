@@ -1,0 +1,88 @@
+/* Watch bar: topic filter and what it does. */
+.mqtt-watch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+
+.mqtt-watch .label {
+  margin: 0;
+}
+
+.mqtt-watch .help {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.mqtt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mqtt-search {
+  flex: 1;
+  min-width: 180px;
+}
+
+.mqtt-topic {
+  overflow-wrap: anywhere;
+}
+
+.mqtt-last {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mqtt-grid {
+  width: 100%;
+}
+
+.mqtt-payload {
+  max-width: 480px;
+  color: var(--text-2);
+}
+
+.mqtt-dir {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mqtt-dir.sent {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.mqtt-dir.received {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.mqtt-flag {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12px;
+}
+
+.mqtt-empty {
+  padding: 24px 20px;
+}
+
+@media (max-width: 900px) {
+  .mqtt-watch {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .mqtt-watch .label {
+    grid-column: 1 / -1;
+  }
+}

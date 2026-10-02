@@ -5,11 +5,12 @@ import { ErgoLogo } from './ErgoLogo.tsx'
 // shows the name, so the brand is left out.
 const embedded = window.self !== window.top
 
-export type Section = 'workflows' | 'data'
+export type Section = 'workflows' | 'data' | 'mqtt'
 
 const SECTIONS: { id: Section; label: string; href: string }[] = [
   { id: 'workflows', label: 'Workflows', href: '#/' },
   { id: 'data', label: 'Database', href: '#/data' },
+  { id: 'mqtt', label: 'MQTT', href: '#/mqtt' },
 ]
 
 export function TopBar({ left, section, children }: { left?: ReactNode; section?: Section; children?: ReactNode }) {

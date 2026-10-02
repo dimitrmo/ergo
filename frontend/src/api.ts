@@ -184,6 +184,28 @@ export interface DbPage {
   limit: number
 }
 
+export interface MqttMessage {
+  seq: number
+  at: string
+  /** `sent` by ergo, or `received` on the watched filter. */
+  direction: 'sent' | 'received'
+  topic: string
+  payload: string
+  /** Not UTF-8; `payload` is hex. */
+  binary: boolean
+  truncated: boolean
+  bytes: number
+  qos: number
+  retain: boolean
+}
+
+export interface MqttMessages {
+  status: { configured: boolean; connected: boolean; broker: string | null; error: string | null }
+  filter: string | null
+  seq: number
+  messages: MqttMessage[]
+}
+
 /** An export file: workflows' names and drafts, for Import on another ergo. */
 export interface ExportFile {
   format: 'ergo.workflows'
@@ -244,6 +266,9 @@ export const api = {
     call<{ path: string; tables: DbTable[]; retention: { days: number; max_runs: number } }>('GET', 'api/db/tables'),
   dbRows: (table: string, offset = 0, limit = 50) =>
     call<DbPage>('GET', `api/db/tables/${encodeURIComponent(table)}?offset=${offset}&limit=${limit}`),
+  mqttMessages: (after = 0) => call<MqttMessages>('GET', `api/mqtt/messages?after=${after}`),
+  mqttClear: () => call<unknown>('DELETE', 'api/mqtt/messages'),
+  mqttWatch: (filter: string | null) => call<{ filter: string | null }>('POST', 'api/mqtt/watch', { filter }),
   cronPreview: (cron: string) =>
     call<{ next: string[]; time_zone: string }>('POST', 'api/cron/preview', { cron }),
 }

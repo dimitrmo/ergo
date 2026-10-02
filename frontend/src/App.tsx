@@ -3,6 +3,7 @@ import { StatusBar } from './components/StatusBar.tsx'
 import { useReady } from './hooks.ts'
 import { Database } from './pages/Database.tsx'
 import { Editor } from './pages/Editor.tsx'
+import { Mqtt } from './pages/Mqtt.tsx'
 import { Status } from './pages/Status.tsx'
 import { Workflows } from './pages/Workflows.tsx'
 
@@ -28,6 +29,8 @@ export default function App() {
         <Editor key={editing[1]} id={editing[1]} />
       ) : route === '/data' ? (
         <Database />
+      ) : route === '/mqtt' ? (
+        <Mqtt />
       ) : route === '/status' ? (
         <Status ready={ready} />
       ) : (
