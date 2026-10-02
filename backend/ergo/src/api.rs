@@ -575,7 +575,12 @@ async fn mqtt_publish(State(s): AppStateRef, Json(body): Json<PublishBody>) -> A
         ));
     }
     mqtt(&s)?
-        .publish(topic, body.payload.into_bytes(), body.qos.min(2), body.retain)
+        .publish(
+            topic,
+            body.payload.into_bytes(),
+            body.qos.min(2),
+            body.retain,
+        )
         .await
         .map_err(|e| ApiError::bad(StatusCode::BAD_GATEWAY, e))?;
     Ok(Json(json!({ "published": topic })))
