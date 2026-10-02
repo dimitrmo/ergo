@@ -4,8 +4,11 @@
 //! they can be tested with fakes and wired to real clients in the binary.
 
 mod data;
+mod flow;
+mod ha;
 mod http;
 mod jsonata;
+mod mqtt;
 mod parse;
 mod text;
 
@@ -13,7 +16,10 @@ mod text;
 mod pipeline_tests;
 
 pub use data::{DataFilter, DataMap};
+pub use flow::FlowIf;
+pub use ha::{ActionCall, HaAction, HaCaller};
 pub use http::{HttpDownload, HttpRequest};
+pub use mqtt::{MqttTrigger, filter_covers, topic_matches, valid_topic_filter};
 pub use parse::{DataParse, JsonParser, Parser, XmlParser, parsers};
 pub use text::TextCompose;
 
@@ -40,20 +46,27 @@ pub trait MqttPublisher: Send + Sync {
     ) -> Result<(), String>;
 }
 
-/// Every node type. Without `mqtt` (MQTT turned off), `mqtt.publish` is left
-/// out and workflows that use it are told why.
-pub fn registry(mqtt: Option<Arc<dyn MqttPublisher>>) -> Registry {
+/// Every node type. Without `mqtt` (MQTT turned off), the MQTT trigger and
+/// publish are left out and workflows that use them are told why.
+pub fn registry(mqtt: Option<Arc<dyn MqttPublisher>>, ha: Arc<dyn HaCaller>) -> Registry {
+    const MQTT_OFF: &str =
+        "MQTT is off. Check the add-on's mqtt_url option; the Status page says why.";
     let mut r = Registry::default();
     r.register(StateTrigger);
     r.register(CronTrigger);
     r.register(ManualTrigger);
     match mqtt {
-        Some(mqtt) => r.register(MqttPublish { mqtt }),
-        None => r.disable(
-            "mqtt.publish",
-            "MQTT is off. Check the add-on's mqtt_url option; the Status page says why.",
-        ),
+        Some(mqtt) => {
+            r.register(MqttTrigger);
+            r.register(MqttPublish { mqtt });
+        }
+        None => {
+            r.disable("trigger.mqtt", MQTT_OFF);
+            r.disable("mqtt.publish", MQTT_OFF);
+        }
     }
+    r.register(HaAction::new(ha));
+    r.register(FlowIf);
     r.register(TextCompose);
     r.register(HttpDownload::new());
     r.register(HttpRequest::new());
@@ -80,7 +93,7 @@ pub(crate) fn object(props: Value) -> Value {
 /// Fields every trigger event has.
 fn event_fields(extra: Value) -> Value {
     let mut props = json!({
-        "kind": string("What started the run: state, cron or manual"),
+        "kind": string("What started the run: state, cron, mqtt or manual"),
         "time": string("When it fired, in HA's time zone"),
         "node": string("The trigger's node id"),
         "id": string("The trigger's nickname, if set"),

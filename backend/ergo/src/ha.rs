@@ -5,12 +5,15 @@
 //! commands. It reconnects with backoff and resyncs the cache after each
 //! reconnect; events that happen while disconnected are not replayed.
 
-use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use ergo_nodes::{ActionCall, HaCaller};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -51,6 +54,10 @@ pub struct Entity {
 
 type Command = (Value, oneshot::Sender<Result<Value, String>>);
 
+/// How long a call's context is remembered: state changes it causes arrive
+/// well within this.
+const CALL_MEMORY: Duration = Duration::from_secs(60);
+
 pub struct Ha {
     ws_url: String,
     token: Option<String>,
@@ -58,6 +65,14 @@ pub struct Ha {
     states: RwLock<BTreeMap<String, Value>>,
     events: broadcast::Sender<StateChanged>,
     commands: mpsc::Sender<Command>,
+    /// Contexts of recent action calls and the workflow that made each, so a
+    /// workflow isn't triggered again by the state changes it caused.
+    calls: Mutex<VecDeque<(Instant, String, String)>>,
+    /// Action calls waiting for HA's answer. HA sends the state changes a
+    /// call causes before the answer that names its context.
+    in_flight: AtomicUsize,
+    /// The action catalog (`get_services`), fetched once per connection.
+    services: RwLock<Option<Value>>,
 }
 
 /// `http://supervisor/core` becomes `ws://supervisor/core/websocket`;
@@ -96,6 +111,9 @@ impl Ha {
                 states: RwLock::new(BTreeMap::new()),
                 events,
                 commands,
+                calls: Mutex::new(VecDeque::new()),
+                in_flight: AtomicUsize::new(0),
+                services: RwLock::new(None),
             }),
             rx,
         ))
@@ -142,8 +160,42 @@ impl Ha {
             .collect()
     }
 
+    /// The workflow whose action call caused a state change with this
+    /// context id, if it was one of ergo's calls.
+    pub fn caused_by(&self, context_id: &str) -> Option<String> {
+        let mut calls = self.calls.lock().unwrap();
+        while calls
+            .front()
+            .is_some_and(|(at, _, _)| at.elapsed() > CALL_MEMORY)
+        {
+            calls.pop_front();
+        }
+        calls
+            .iter()
+            .find(|(_, id, _)| id == context_id)
+            .map(|(_, _, wf)| wf.clone())
+    }
+
+    /// Waits (up to `max`) until ergo's action calls have their answers, so
+    /// [`Ha::caused_by`] knows every call's context.
+    pub async fn calls_settled(&self, max: Duration) {
+        let deadline = Instant::now() + max;
+        while self.in_flight.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    /// Every action HA offers, by domain, with its fields (for the editor).
+    pub async fn services(&self) -> Result<Value, String> {
+        if let Some(s) = self.services.read().unwrap().clone() {
+            return Ok(s);
+        }
+        let s = self.call(json!({ "type": "get_services" })).await?;
+        *self.services.write().unwrap() = Some(s.clone());
+        Ok(s)
+    }
+
     /// Sends a WebSocket command (without `id`) and waits for its result.
-    #[allow(dead_code)] // used by HA action nodes from M2
     pub async fn call(&self, msg: Value) -> Result<Value, String> {
         let (tx, rx) = oneshot::channel();
         self.commands
@@ -225,6 +277,8 @@ impl Ha {
         ping.tick().await;
 
         info!(url = %self.ws_url, ?version, "connected to Home Assistant");
+        // Integrations may have changed while disconnected.
+        *self.services.write().unwrap() = None;
         self.set_status(|s| {
             s.connected = true;
             s.error = None;
@@ -314,6 +368,42 @@ impl Ha {
             old_state: data.get("old_state").filter(|v| !v.is_null()).cloned(),
             new_state,
         });
+    }
+}
+
+#[async_trait]
+impl HaCaller for Ha {
+    async fn call_action(&self, call: ActionCall) -> Result<Value, String> {
+        if !self.status().connected {
+            return Err("Home Assistant isn't connected".into());
+        }
+        let mut msg = json!({
+            "type": "call_service",
+            "domain": call.domain,
+            "service": call.service,
+            "service_data": call.data,
+            "return_response": call.return_response,
+        });
+        if !call.entity_ids.is_empty() {
+            msg["target"] = json!({ "entity_id": call.entity_ids });
+        }
+        self.in_flight.fetch_add(1, Ordering::AcqRel);
+        let result = self.call(msg).await;
+        // Recorded before it stops counting as in flight.
+        if let Some(id) = result
+            .as_ref()
+            .ok()
+            .and_then(|r| r["context"]["id"].as_str())
+        {
+            let mut calls = self.calls.lock().unwrap();
+            calls.push_back((Instant::now(), id.to_string(), call.workflow_id));
+            // A burst of calls can't grow this without bound.
+            while calls.len() > 1000 {
+                calls.pop_front();
+            }
+        }
+        self.in_flight.fetch_sub(1, Ordering::AcqRel);
+        result
     }
 }
 

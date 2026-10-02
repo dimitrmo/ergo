@@ -38,7 +38,7 @@ fn select_items(input: &Value, path: &str) -> Result<Vec<Value>, NodeError> {
 }
 
 /// A field of an item: `$.a.b` as JSONPath, or a plain `a.b` key path.
-fn field_of(item: &Value, field: &str) -> Result<Option<Value>, NodeError> {
+pub(crate) fn field_of(item: &Value, field: &str) -> Result<Option<Value>, NodeError> {
     let field = field.trim();
     if field.starts_with('$') {
         let found = compile(field)?.query(item).all();
@@ -68,14 +68,14 @@ fn as_number(v: &Value) -> Option<f64> {
 }
 
 /// Template results count as true unless empty, false, 0, none or null.
-fn truthy(text: &str) -> bool {
+pub(crate) fn truthy(text: &str) -> bool {
     !matches!(
         text.trim().to_ascii_lowercase().as_str(),
         "" | "false" | "0" | "none" | "null"
     )
 }
 
-const OPS: &[&str] = &[
+pub(crate) const OPS: &[&str] = &[
     "equals",
     "not_equals",
     "contains",
@@ -88,7 +88,7 @@ const OPS: &[&str] = &[
     "not_exists",
 ];
 
-fn rule_matches(op: &str, actual: Option<&Value>, expected: &str) -> bool {
+pub(crate) fn rule_matches(op: &str, actual: Option<&Value>, expected: &str) -> bool {
     let text = actual.map(as_text).unwrap_or_default();
     let (a, b) = (text.to_lowercase(), expected.to_lowercase());
     match op {

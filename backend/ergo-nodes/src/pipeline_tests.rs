@@ -251,6 +251,107 @@ impl MqttPublisher for NoMqtt {
     }
 }
 
+/// Records HA action calls.
+#[derive(Default)]
+struct RecordingHa(Mutex<Vec<ActionCall>>);
+#[async_trait]
+impl HaCaller for RecordingHa {
+    async fn call_action(&self, call: ActionCall) -> Result<Value, String> {
+        self.0.lock().unwrap().push(call);
+        Ok(json!({ "context": { "id": "c" }, "response": null }))
+    }
+}
+
+async fn run_to_end(engine: &Arc<Engine>, sink: &Sink, graph: Graph, trigger: Value) {
+    engine.start(RunRequest {
+        workflow_id: "wf".into(),
+        version: 0,
+        graph: Arc::new(graph),
+        trigger_node: "t".into(),
+        trigger,
+    });
+    for _ in 0..200 {
+        if sink.done.lock().unwrap().is_some() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("the run didn't finish");
+}
+
+#[tokio::test]
+async fn if_sends_the_run_down_one_branch_to_an_ha_action() {
+    let graph: Graph = serde_json::from_value(json!({
+        "nodes": [
+            { "id": "t", "type": "trigger.manual", "config": {} },
+            { "id": "if", "type": "flow.if", "config": {
+                "mode": "rules", "rules": [{ "field": "to", "op": "equals", "value": "on" }] } },
+            { "id": "yes", "type": "ha.action", "config": {
+                "action": "light.turn_on", "entity_id": "light.hall",
+                "data": "{\"brightness_pct\": {{ input.level }}}" } },
+            { "id": "no", "type": "ha.action", "config": { "action": "light.turn_off", "entity_id": "light.hall" } }
+        ],
+        "edges": [
+            { "from": "t", "to": "if" },
+            { "from": "if", "fromPort": "true", "to": "yes" },
+            { "from": "if", "fromPort": "false", "to": "no" }
+        ]
+    }))
+    .unwrap();
+    for (to, expected) in [("on", "turn_on"), ("off", "turn_off")] {
+        let ha = Arc::new(RecordingHa::default());
+        let sink = Arc::new(Sink::default());
+        let engine = Engine::new(
+            Arc::new(registry(None, ha.clone())),
+            sink.clone(),
+            4,
+            Duration::from_secs(5),
+        );
+        run_to_end(
+            &engine,
+            &sink,
+            graph.clone(),
+            json!({ "kind": "manual", "to": to, "level": 40 }),
+        )
+        .await;
+        let done = sink.done.lock().unwrap().clone().unwrap();
+        assert_eq!(done.0, RunStatus::Success, "{:?}", done.1);
+        let calls = ha.0.lock().unwrap();
+        assert_eq!(calls.len(), 1, "only one branch runs");
+        assert_eq!(calls[0].service, expected);
+        assert_eq!(calls[0].workflow_id, "wf");
+        if to == "on" {
+            assert_eq!(
+                calls[0].data,
+                json!({ "brightness_pct": 40 }),
+                "the if passes its input on"
+            );
+        }
+        let port = sink
+            .nodes
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|n| n.node_id == "if")
+            .unwrap()
+            .port
+            .clone();
+        assert_eq!(
+            port.as_deref(),
+            Some(if to == "on" { "true" } else { "false" })
+        );
+    }
+}
+
+#[test]
+fn without_mqtt_its_steps_explain_why() {
+    let r = registry(None, Arc::new(RecordingHa::default()));
+    assert!(r.get("trigger.mqtt").is_none() && r.get("mqtt.publish").is_none());
+    assert!(r.unavailable("trigger.mqtt").contains("MQTT is off"));
+    let r = registry(Some(Arc::new(NoMqtt)), Arc::new(RecordingHa::default()));
+    assert!(r.get("trigger.mqtt").is_some());
+}
+
 #[tokio::test]
 async fn the_rss_pipeline_from_the_doc() {
     let server = MockServer::start().await;
@@ -284,7 +385,10 @@ async fn the_rss_pipeline_from_the_doc() {
     let dir = std::env::temp_dir().join(format!("ergo-pipe-{}", uuid::Uuid::new_v4()));
     let sink = Arc::new(Sink::default());
     let engine = Engine::new(
-        Arc::new(registry(Some(Arc::new(NoMqtt)))),
+        Arc::new(registry(
+            Some(Arc::new(NoMqtt)),
+            Arc::new(RecordingHa::default()),
+        )),
         sink.clone(),
         4,
         Duration::from_secs(10),

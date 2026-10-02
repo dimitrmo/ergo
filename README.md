@@ -11,8 +11,9 @@ in the spirit of n8n but made for the home: a Rust backend and a React Flow edit
 Home Assistant add-on that lives in your sidebar.
 
 - **Triggers:** an entity changing state (in real time, over HA's WebSocket API), a schedule in
-  HA's time zone, or a button press.
-- **Steps:** publish to MQTT. HTTP requests, HA actions, data and logic steps are on the roadmap.
+  HA's time zone, an MQTT message, or a button press.
+- **Steps:** Home Assistant actions (any `domain.action`), **If** with yes/no branches, MQTT
+  publish, web requests and downloads, and data steps (parse, filter, map, compose).
 - **Built to be friendly:** workflows read as sentences, steps are added with **+**, schedules
   are picked from presets, and **Try it** shows what each step did.
 - **Built to be safe:** edits are drafts until you go live, runs are recorded step by step,
@@ -38,7 +39,7 @@ HA sidebar ── Ingress ──► nginx ───┘  (static UI + /api proxy,
 | Part | What it is |
 | --- | --- |
 | `backend/ergo-core` | Workflow model, validation, templating (MiniJinja), engine |
-| `backend/ergo-nodes` | Node types: state, schedule and manual triggers; MQTT publish |
+| `backend/ergo-nodes` | Node types: triggers, HA actions, If, MQTT, HTTP and data steps |
 | `backend/ergo` | The binary: HA client, MQTT, triggers, SQLite storage, REST API |
 | `frontend` | Vite + React + React Flow editor, built as static files |
 | `addon` | The HA add-on: Dockerfile, nginx config, `config.yaml`, docs |

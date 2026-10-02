@@ -3,9 +3,10 @@ import type { Entity, NodeSchema, RunNode } from '../api.ts'
 import { Icon } from '../components/Icon.tsx'
 import { nodeIcon } from '../describe.ts'
 import { EntityPicker, FieldBlock, FieldInput, type InsertChip, MoreOptions, SchedulePicker, StateChips, TemplateText } from './fields.tsx'
-import { ComposeForm, DownloadForm, FilterForm, MapForm, ParseForm, RequestForm } from './dataForms.tsx'
+import { ComposeForm, DownloadForm, FilterForm, IfForm, MapForm, ParseForm, RequestForm } from './dataForms.tsx'
+import { ActionForm, MqttTriggerForm } from './haForms.tsx'
 import { JsonTree } from './JsonTree.tsx'
-import { type ErgoNode, useEditor } from './model.ts'
+import { type ErgoNode, PORT_LABEL, useEditor } from './model.ts'
 
 type Patch = { label?: string; config?: Record<string, unknown> }
 
@@ -40,6 +41,9 @@ function insertChips(upstream: NodeSchema[]): InsertChip[] {
     if (schema.type === 'trigger.state') {
       add({ label: 'Entity name', value: '{{ input.to_state.attributes.friendly_name }}', title: 'Friendly name of the entity' })
     }
+    if (schema.type === 'trigger.mqtt') {
+      add({ label: 'Message JSON', value: '{{ input.json }}', title: 'The message parsed as JSON; add .field for one value' })
+    }
   }
   // Right after a trigger, `input.time` already is the run's time.
   if (!chips.some((c) => c.label === 'Time')) {
@@ -60,6 +64,7 @@ function Form({ node, onChange, upstream }: { node: ErgoNode; onChange: (p: Patc
   const cfg = node.data.config
   const s = (k: string) => (typeof cfg[k] === 'string' ? (cfg[k] as string) : cfg[k] == null ? '' : String(cfg[k]))
   const set = (k: string, v: unknown) => onChange({ config: { ...cfg, [k]: v } })
+  const setMany = (patch: Record<string, unknown>) => onChange({ config: { ...cfg, ...patch } })
   const nickname = (
     <FieldBlock label="Nickname" help="Optional. Later steps can tell triggers apart with {{ trigger.id }}.">
       <input
@@ -139,6 +144,12 @@ function Form({ node, onChange, upstream }: { node: ErgoNode; onChange: (p: Patc
           </MoreOptions>
         </>
       )
+    case 'trigger.mqtt':
+      return <MqttTriggerForm cfg={cfg} set={set} nickname={nickname} />
+    case 'ha.action':
+      return <ActionForm cfg={cfg} set={set} setMany={setMany} entities={entities} chips={insertChips(upstream)} />
+    case 'flow.if':
+      return <IfForm cfg={cfg} set={set} chips={insertChips(upstream)} />
     case 'http.request':
       return <RequestForm cfg={cfg} set={set} chips={insertChips(upstream)} />
     case 'http.download':
@@ -211,9 +222,19 @@ export function StepPanel({
         {result && <StepInspector result={result} edited={stale.has(node.id)} />}
       </div>
       <footer className="drawer-foot split">
-        <button className="btn" onClick={() => onAddAfter(node.id)}>
-          <Icon name="plus" size={16} /> Add a step after this
-        </button>
+        {(schema?.ports.length ?? 1) > 1 ? (
+          <div className="add-per-port">
+            {schema!.ports.map((port) => (
+              <button key={port} className="btn" onClick={() => onAddAfter(node.id, port)}>
+                <Icon name="plus" size={16} /> Add for “{PORT_LABEL[port] ?? port}”
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button className="btn" onClick={() => onAddAfter(node.id)}>
+            <Icon name="plus" size={16} /> Add a step after this
+          </button>
+        )}
         <button className="btn danger" onClick={onDelete}>
           <Icon name="trash" size={16} /> Remove
         </button>

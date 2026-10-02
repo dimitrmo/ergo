@@ -13,6 +13,9 @@ const FILTER_KEY = 'ergo.mqtt.filter'
 
 type Direction = 'all' | 'sent' | 'received'
 
+type Draft = { topic: string; payload: string; qos: number; retain: boolean }
+const EMPTY_DRAFT: Draft = { topic: '', payload: '', qos: 0, retain: false }
+
 function savedFilter(): string {
   try {
     return localStorage.getItem(FILTER_KEY) ?? '#'
@@ -45,6 +48,8 @@ export function Mqtt() {
   const [selected, setSelected] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [sending, setSending] = useState(false)
   const seq = useRef(0)
 
   // Polls for new messages; this also keeps the backend's watch alive.
@@ -139,6 +144,19 @@ export function Mqtt() {
     }
   }
 
+  const send = async () => {
+    if (!draft) return
+    setSending(true)
+    try {
+      await api.mqttPublish(draft)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSending(false)
+    }
+  }
+
   const status = state?.status
   const watching = state?.filter ?? null
 
@@ -165,6 +183,9 @@ export function Mqtt() {
             }
             actions={
               <>
+                <button className={`btn${draft ? ' active' : ''}`} onClick={() => setDraft(draft ? null : EMPTY_DRAFT)} disabled={!status?.connected}>
+                  <Icon name="send" size={16} /> Publish
+                </button>
                 <button className="btn" onClick={() => setFrozen(frozen ? null : messages)}>
                   <Icon name={frozen ? 'play' : 'clock'} size={16} />
                   {frozen ? `Resume${pending ? ` (${pending} new)` : ''}` : 'Pause'}
@@ -176,6 +197,67 @@ export function Mqtt() {
             }
           />
           {error && <div className="issue">{error}</div>}
+
+          {draft && (
+            <form
+              className="surface mqtt-publish"
+              onSubmit={(e) => {
+                e.preventDefault()
+                send()
+              }}
+            >
+              <div className="mqtt-publish-row">
+                <label className="label" htmlFor="mqtt-pub-topic">
+                  Topic
+                </label>
+                <input
+                  id="mqtt-pub-topic"
+                  className="input mono"
+                  value={draft.topic}
+                  onChange={(e) => setDraft({ ...draft, topic: e.target.value })}
+                  placeholder="home/test"
+                  spellCheck={false}
+                  autoFocus
+                />
+              </div>
+              <textarea
+                className="textarea mono"
+                value={draft.payload}
+                onChange={(e) => setDraft({ ...draft, payload: e.target.value })}
+                placeholder='Message, e.g. on or {"state": "on"}'
+                spellCheck={false}
+              />
+              <div className="mqtt-publish-row">
+                <div className="chips">
+                  {[0, 1, 2].map((q) => (
+                    <button type="button" key={q} className={`chip small${draft.qos === q ? ' on' : ''}`} onClick={() => setDraft({ ...draft, qos: q })}>
+                      QoS {q}
+                    </button>
+                  ))}
+                </div>
+                <label className="mqtt-retain">
+                  <button
+                    type="button"
+                    className="switch"
+                    role="switch"
+                    aria-checked={draft.retain}
+                    onClick={() => setDraft({ ...draft, retain: !draft.retain })}
+                  />
+                  Retain
+                </label>
+                <span className="spacer" />
+                <button type="button" className="btn ghost" onClick={() => setDraft(null)}>
+                  Close
+                </button>
+                <button className="btn primary" disabled={sending || !draft.topic.trim() || /[+#]/.test(draft.topic)}>
+                  <Icon name="send" size={16} /> {sending ? 'Sending…' : 'Send'}
+                </button>
+              </div>
+              {draft.retain && (
+                <p className="help">The broker keeps it as the topic's last message and hands it to anyone who subscribes later.</p>
+              )}
+            </form>
+          )}
 
           <form
             className="surface mqtt-watch"
@@ -292,7 +374,15 @@ export function Mqtt() {
               </div>
             </section>
 
-            {message && <Detail message={message} onClose={() => setSelected(null)} />}
+            {message && (
+              <Detail
+                message={message}
+                onClose={() => setSelected(null)}
+                onResend={() =>
+                  setDraft({ topic: message.topic, payload: message.binary ? '' : message.payload, qos: message.qos, retain: false })
+                }
+              />
+            )}
           </div>
         </div>
       </main>
@@ -300,7 +390,7 @@ export function Mqtt() {
   )
 }
 
-function Detail({ message: m, onClose }: { message: MqttMessage; onClose: () => void }) {
+function Detail({ message: m, onClose, onResend }: { message: MqttMessage; onClose: () => void; onResend: () => void }) {
   const json = m.binary ? undefined : asJson(m.payload)
   return (
     <aside className="surface db-row">
@@ -337,9 +427,14 @@ function Detail({ message: m, onClose }: { message: MqttMessage; onClose: () => 
             {m.retain ? ', retained by the broker' : ', not retained'}
           </div>
         </div>
-        <button className="btn" onClick={() => navigator.clipboard?.writeText(m.payload)}>
-          <Icon name="braces" size={16} /> Copy payload
-        </button>
+        <div className="mqtt-detail-actions">
+          <button className="btn" onClick={() => navigator.clipboard?.writeText(m.payload)}>
+            <Icon name="braces" size={16} /> Copy payload
+          </button>
+          <button className="btn" onClick={onResend} disabled={m.binary} title="Open it in the publish form to send again or edit">
+            <Icon name="send" size={16} /> Send again…
+          </button>
+        </div>
       </div>
     </aside>
   )

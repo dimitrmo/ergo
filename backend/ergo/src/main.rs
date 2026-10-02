@@ -69,7 +69,9 @@ fn check(file: &std::path::Path) -> Result<()> {
         std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let graph: Graph = serde_json::from_str(&text).context("parsing workflow JSON")?;
     // Checks every step type, MQTT included, whatever this install's options.
-    let registry = ergo_nodes::registry(Some(Mqtt::disabled(None)));
+    // An HA client that never connects: only the step types are needed.
+    let (ha, _) = Ha::new("http://localhost:8123", None)?;
+    let registry = ergo_nodes::registry(Some(Mqtt::disabled(None)), ha);
     let issues = validate(&graph, &registry);
     for issue in &issues {
         println!(
@@ -148,6 +150,7 @@ async fn serve(cfg: Config) -> Result<()> {
     let registry = Arc::new(ergo_nodes::registry(
         mqtt.clone()
             .map(|m| m as Arc<dyn ergo_nodes::MqttPublisher>),
+        ha.clone(),
     ));
     // Large downloads go to <data>/tmp; each run's files are deleted when it ends.
     let engine = Engine::new(registry, db.clone(), cfg.max_concurrent_runs, NODE_TIMEOUT)
@@ -158,9 +161,16 @@ async fn serve(cfg: Config) -> Result<()> {
         .as_deref()
         .and_then(|z| z.parse().ok())
         .unwrap_or(chrono_tz::UTC);
-    let triggers = Triggers::new(db.clone(), engine.clone(), ha.clone(), fallback_tz);
+    let triggers = Triggers::new(
+        db.clone(),
+        engine.clone(),
+        ha.clone(),
+        mqtt.clone(),
+        fallback_tz,
+    );
     triggers.reload()?;
     tokio::spawn(triggers.clone().dispatch_state_changes());
+    tokio::spawn(triggers.clone().dispatch_mqtt_messages());
 
     let retention_db = db.clone();
     let (days, max) = (cfg.run_retention_days, cfg.run_retention_max);

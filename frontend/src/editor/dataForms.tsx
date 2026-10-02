@@ -298,10 +298,124 @@ const OPS: [string, string][] = [
 
 type Rule = { field: string; op: string; value: string }
 
-export function FilterForm({ cfg, set }: { cfg: Cfg; set: Set }) {
-  const mode = str(cfg.mode) || 'rules'
+/** Rules (field, operator, value) with all/any, as Filter and If use them. */
+function RulesEditor({
+  cfg,
+  set,
+  fieldPlaceholder,
+  valuePlaceholder,
+  help,
+}: {
+  cfg: Cfg
+  set: Set
+  fieldPlaceholder: string
+  valuePlaceholder: string
+  help: ReactNode
+}) {
   const rules = list<Rule>(cfg.rules)
   const setRule = (i: number, r: Partial<Rule>) => set('rules', rules.map((x, j) => (j === i ? { ...x, ...r } : x)))
+  return (
+    <>
+      {rules.length > 1 && (
+        <Chips options={[['all', 'All rules match'], ['any', 'Any rule matches']]} value={str(cfg.match) || 'all'} onChange={(v) => set('match', v)} />
+      )}
+      <div className="rules">
+        {rules.map((r, i) => (
+          <div key={i} className="rule">
+            <input className="input mono" value={r.field} placeholder={fieldPlaceholder} spellCheck={false} onChange={(e) => setRule(i, { field: e.target.value })} />
+            <select className="select" value={r.op || 'equals'} onChange={(e) => setRule(i, { op: e.target.value })}>
+              {OPS.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            {!['exists', 'not_exists'].includes(r.op) ? (
+              <input className="input mono" value={r.value} placeholder={valuePlaceholder} spellCheck={false} onChange={(e) => setRule(i, { value: e.target.value })} />
+            ) : (
+              <span />
+            )}
+            <button className="btn ghost icon" aria-label="Remove rule" onClick={() => set('rules', rules.filter((_, j) => j !== i))}>
+              <Icon name="x" size={16} />
+            </button>
+          </div>
+        ))}
+        <button className="btn ghost small add-row" onClick={() => set('rules', [...rules, { field: '', op: 'equals', value: '' }])}>
+          <Icon name="plus" size={14} /> Add rule
+        </button>
+      </div>
+      <p className="help">{help}</p>
+    </>
+  )
+}
+
+/** If: a condition on the step's input, with yes and no exits. */
+export function IfForm({ cfg, set, chips }: { cfg: Cfg; set: Set; chips: InsertChip[] }) {
+  const mode = str(cfg.mode) || 'rules'
+  return (
+    <>
+      <FieldBlock label="Check with">
+        <Chips
+          options={[
+            ['rules', 'Rules'],
+            ['expression', 'Template'],
+            ['jsonata', 'JSONata'],
+          ]}
+          value={mode}
+          onChange={(v) => set('mode', v)}
+        />
+      </FieldBlock>
+      {mode === 'rules' ? (
+        <RulesEditor
+          cfg={cfg}
+          set={set}
+          fieldPlaceholder="to"
+          valuePlaceholder="on"
+          help={
+            <>
+              Fields are keys of this step's input, like <code>to</code> or <code>to_state.attributes.temperature</code>, or a
+              template such as <code>{'{{ trigger.time }}'}</code> for anything else. Text matches ignore case; numbers compare
+              as numbers.
+            </>
+          }
+        />
+      ) : mode === 'jsonata' ? (
+        <FieldBlock
+          label="Yes when"
+          help={
+            <>
+              Runs on this step's input; <code>$trigger</code> and <code>$steps</code> are there too. Yes when the result is
+              true (not empty, 0 or missing).
+            </>
+          }
+        >
+          <textarea
+            className="textarea mono short"
+            value={str(cfg.jsonata)}
+            spellCheck={false}
+            placeholder={"to = 'on' and to_state.attributes.brightness > 100"}
+            onChange={(e) => set('jsonata', e.target.value)}
+          />
+        </FieldBlock>
+      ) : (
+        <FieldBlock label="Template" help="Yes when the result is not empty, false or 0.">
+          <TemplateText
+            value={str(cfg.expression)}
+            onChange={(v) => set('expression', v)}
+            placeholder="{{ input.to == 'on' and trigger.time[11:] > '18:00' }}"
+            chips={chips}
+          />
+        </FieldBlock>
+      )}
+      <p className="help">
+        The run continues from <strong>yes</strong> or <strong>no</strong>, with the same data this step got.
+      </p>
+    </>
+  )
+}
+
+export function FilterForm({ cfg, set }: { cfg: Cfg; set: Set }) {
+  const mode = str(cfg.mode) || 'rules'
   return (
     <>
       <FieldBlock label="Which list?" help={PATH_HELP}>
@@ -319,37 +433,17 @@ export function FilterForm({ cfg, set }: { cfg: Cfg; set: Set }) {
         />
       </FieldBlock>
       {mode === 'rules' ? (
-        <>
-          {rules.length > 1 && (
-            <Chips options={[['all', 'All rules match'], ['any', 'Any rule matches']]} value={str(cfg.match) || 'all'} onChange={(v) => set('match', v)} />
-          )}
-          <div className="rules">
-            {rules.map((r, i) => (
-              <div key={i} className="rule">
-                <input className="input mono" value={r.field} placeholder="category" spellCheck={false} onChange={(e) => setRule(i, { field: e.target.value })} />
-                <select className="select" value={r.op || 'equals'} onChange={(e) => setRule(i, { op: e.target.value })}>
-                  {OPS.map(([v, l]) => (
-                    <option key={v} value={v}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-                {!['exists', 'not_exists'].includes(r.op) ? (
-                  <input className="input mono" value={r.value} placeholder="rust" spellCheck={false} onChange={(e) => setRule(i, { value: e.target.value })} />
-                ) : (
-                  <span />
-                )}
-                <button className="btn ghost icon" aria-label="Remove rule" onClick={() => set('rules', rules.filter((_, j) => j !== i))}>
-                  <Icon name="x" size={16} />
-                </button>
-              </div>
-            ))}
-            <button className="btn ghost small add-row" onClick={() => set('rules', [...rules, { field: '', op: 'equals', value: '' }])}>
-              <Icon name="plus" size={14} /> Add rule
-            </button>
-          </div>
-          <p className="help">Fields are keys of each item, like <code>title</code> or <code>author.name</code>. Text matches ignore case.</p>
-        </>
+        <RulesEditor
+          cfg={cfg}
+          set={set}
+          fieldPlaceholder="category"
+          valuePlaceholder="rust"
+          help={
+            <>
+              Fields are keys of each item, like <code>title</code> or <code>author.name</code>. Text matches ignore case.
+            </>
+          }
+        />
       ) : mode === 'jsonata' ? (
         <FieldBlock
           label="Keep an item when"

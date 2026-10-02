@@ -185,6 +185,24 @@ export interface DbPage {
   limit: number
 }
 
+/** One field of a Home Assistant action, as `get_services` describes it. */
+export interface HaActionField {
+  required?: boolean
+  example?: unknown
+  selector?: Record<string, unknown>
+}
+
+/** A Home Assistant action: its fields, what it can target, whether it answers. */
+export interface HaActionInfo {
+  fields?: Record<string, HaActionField>
+  target?: { entity?: { domain?: string[] }[] }
+  /** `optional: false` means it must be called asking for its answer. */
+  response?: { optional: boolean }
+}
+
+/** domain -> action -> info, e.g. light -> turn_on. */
+export type HaActions = Record<string, Record<string, HaActionInfo>>
+
 export interface MqttMessage {
   seq: number
   at: string
@@ -264,12 +282,15 @@ export const api = {
   runDetail: (id: string) => call<RunDetail>('GET', `api/runs/${id}`),
   nodes: () => call<NodeSchema[]>('GET', 'api/nodes'),
   entities: () => call<Entity[]>('GET', 'api/entities'),
+  haActions: () => call<HaActions>('GET', 'api/ha/actions'),
   dbTables: () =>
     call<{ path: string; tables: DbTable[]; retention: { days: number; max_runs: number } }>('GET', 'api/db/tables'),
   dbRows: (table: string, offset = 0, limit = 50) =>
     call<DbPage>('GET', `api/db/tables/${encodeURIComponent(table)}?offset=${offset}&limit=${limit}`),
   mqttMessages: (after = 0) => call<MqttMessages>('GET', `api/mqtt/messages?after=${after}`),
   mqttClear: () => call<unknown>('DELETE', 'api/mqtt/messages'),
+  mqttPublish: (msg: { topic: string; payload: string; qos: number; retain: boolean }) =>
+    call<{ published: string }>('POST', 'api/mqtt/publish', msg),
   mqttWatch: (filter: string | null) => call<{ filter: string | null }>('POST', 'api/mqtt/watch', { filter }),
   cronPreview: (cron: string) =>
     call<{ next: string[]; time_zone: string }>('POST', 'api/cron/preview', { cron }),

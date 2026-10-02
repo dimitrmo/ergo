@@ -3,10 +3,27 @@
 ergo is a visual workflow builder for Home Assistant. A workflow starts from
 a trigger and runs steps:
 
-- **Triggers:** an entity changing state (in real time), a cron schedule, or
-  the Run button.
-- **Steps:** publish to MQTT. HTTP calls, HA service calls, and data and logic
-  nodes arrive in later versions.
+- **Triggers:** an entity changing state (in real time), a schedule, an MQTT
+  message, or the Run button.
+- **Steps:** Home Assistant actions (turn on a light, notify your phone, any
+  `domain.action`), **If** to go one way or another, MQTT publish, web
+  requests, and data steps that parse, filter, map and compose.
+
+## Home Assistant actions
+
+The **HA action** step lists every action your Home Assistant offers, with the
+entities it can act on and the options it takes. Options are a JSON object and
+can use templates, e.g. `{"brightness_pct": {{ input.level }}}`.
+
+A workflow isn't triggered again by the state changes its own actions cause,
+so "when the light changes, toggle it" can't loop forever. Other workflows do
+see those changes.
+
+## If
+
+**If** checks a condition (rules, a template, or JSONata) on the data it
+receives and continues from **yes** or **no**. The steps after it get the same
+data the If got.
 
 ## Getting started
 
@@ -39,6 +56,14 @@ broker) and restart the add-on.
 
 Once MQTT is on, a broker that goes away later is reconnected automatically;
 MQTT steps fail with a clear error until it's back.
+
+### MQTT triggers
+
+The **MQTT message** trigger starts a run when a message arrives on a topic or
+a filter (`+` for one level, `#` for everything below), optionally only for an
+exact message such as `single`. Retained messages, which a broker replays when
+ergo subscribes, don't start runs. **Try it** replays the newest message seen
+on the topic, if any.
 
 ## Options
 

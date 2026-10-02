@@ -23,9 +23,10 @@ export interface EditorContextValue {
   /** Steps edited since the shown run, whose result no longer applies. */
   stale: Set<string>
   issues: Map<string, Issue[]>
-  /** Nodes with at least one outgoing connection. */
+  /** Exits with a connection, as `node:port`. */
   connected: Set<string>
-  onAddAfter: (nodeId: string) => void
+  /** Opens the chooser for a step after `nodeId`, on `port` (default: its first). */
+  onAddAfter: (nodeId: string, port?: string) => void
 }
 
 export const EditorContext = createContext<EditorContextValue>({
@@ -41,6 +42,9 @@ export const EditorContext = createContext<EditorContextValue>({
 })
 
 export const useEditor = () => useContext(EditorContext)
+
+/** How exits read on the canvas: an If's true/false are yes/no. */
+export const PORT_LABEL: Record<string, string> = { true: 'yes', false: 'no' }
 
 export const edgeId = (c: { source: string; sourceHandle?: string | null; target: string }) =>
   `${c.source}:${c.sourceHandle ?? 'out'}->${c.target}`

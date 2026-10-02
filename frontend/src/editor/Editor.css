@@ -355,6 +355,18 @@
   transform: translateY(-50%) scale(1.1);
 }
 
+/* One + per free exit of a step with several (an If's yes and no). */
+.step-add.on-port {
+  top: var(--port-y);
+  right: -48px;
+  width: 22px;
+  height: 22px;
+}
+
+.step-add.on-port::before {
+  width: 18px;
+}
+
 /* While a connection line is being dragged, get out of the way. */
 .canvas:has(.react-flow__connection) .step-add {
   opacity: 0;
@@ -1276,4 +1288,49 @@ pre.logs {
 .hl-comment {
   color: var(--text-3);
   font-style: italic;
+}
+
+/* Chosen entities of an HA action, each removable. */
+.target-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 4px;
+  cursor: default;
+}
+
+.target-chip button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.target-chip button:hover {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+/* Fields HA requires for the action. */
+.action-fields .chip.required {
+  border-color: var(--line-strong);
+}
+
+.add-per-port {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

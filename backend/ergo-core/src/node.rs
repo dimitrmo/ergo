@@ -236,6 +236,8 @@ pub struct RunCtx<'a> {
     pub steps: &'a Value,
     /// The run's id; temp files are named after it so they're cleaned up.
     pub run_id: &'a str,
+    /// The workflow running, e.g. so HA calls can be traced back to it.
+    pub workflow_id: &'a str,
     /// Where nodes may put large temporary files (deleted when the run ends).
     pub temp_dir: Option<&'a std::path::Path>,
     logs: std::sync::Mutex<Vec<String>>,
@@ -247,6 +249,7 @@ impl<'a> RunCtx<'a> {
             trigger,
             steps,
             run_id: "",
+            workflow_id: "",
             temp_dir: None,
             logs: std::sync::Mutex::new(Vec::new()),
         }
@@ -255,6 +258,11 @@ impl<'a> RunCtx<'a> {
     pub fn with_run(mut self, run_id: &'a str, temp_dir: Option<&'a std::path::Path>) -> Self {
         self.run_id = run_id;
         self.temp_dir = temp_dir;
+        self
+    }
+
+    pub fn with_workflow(mut self, workflow_id: &'a str) -> Self {
+        self.workflow_id = workflow_id;
         self
     }
 

@@ -82,6 +82,28 @@ const OP_WORDS: Record<string, string> = {
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
+/** "to is on (+1)", for If and Filter; "a condition holds" when unset. */
+function describeCondition(config: Record<string, unknown>): string {
+  const short = (t: string) => (t.length > 44 ? `${t.slice(0, 44)}…` : t)
+  if (config.mode === 'expression') return str(config.expression) ? short(str(config.expression)) : 'a condition holds'
+  if (config.mode === 'jsonata') return str(config.jsonata) ? short(str(config.jsonata)) : 'a condition holds'
+  const rules = Array.isArray(config.rules) ? (config.rules as { field?: string; op?: string; value?: string }[]) : []
+  const r = rules.find((x) => str(x.field))
+  if (!r) return 'a condition holds'
+  const op = OP_WORDS[r.op ?? 'equals'] ?? r.op
+  const field = str(r.field).replace(/^\{\{\s*(.*?)\s*\}\}$/, '$1')
+  const more = rules.length > 1 ? ` (${config.match === 'any' ? 'or' : 'and'} ${rules.length - 1} more)` : ''
+  return `${field} ${op}${['exists', 'not_exists'].includes(r.op ?? '') ? '' : ` ${r.value ?? ''}`}${more}`
+}
+
+/** light.turn_on -> "Turn on", input_number.set_value -> "Set value of". */
+export function actionWords(action: string): string {
+  const service = action.split('.')[1] ?? action
+  const words = service.replace(/_/g, ' ')
+  const text = words.charAt(0).toUpperCase() + words.slice(1)
+  return service.startsWith('set_') ? `${text} of` : text
+}
+
 /** The sentence shown on a node. */
 export function describeNode(type: string, config: Record<string, unknown>, entities: Entity[]): string {
   switch (type) {
@@ -98,6 +120,24 @@ export function describeNode(type: string, config: Record<string, unknown>, enti
       return describeSchedule(str(config.cron))
     case 'trigger.manual':
       return 'You start it by hand'
+    case 'trigger.mqtt': {
+      const topic = str(config.topic)
+      if (!topic) return 'Choose a topic to listen on'
+      const payload = typeof config.payload === 'string' && config.payload ? ` says ${config.payload}` : ''
+      return payload ? `${topic}${payload}` : `A message arrives on ${topic}`
+    }
+    case 'ha.action': {
+      const action = str(config.action)
+      if (!action) return 'Choose an action'
+      const ids = str(config.entity_id)
+        .split(/[\s,]+/)
+        .filter(Boolean)
+      if (!ids.length) return `Run ${action}`
+      const first = ids[0].includes('{{') ? ids[0] : entityName(ids[0], entities)
+      return `${actionWords(action)} ${first}${ids.length > 1 ? ` and ${ids.length - 1} more` : ''}`
+    }
+    case 'flow.if':
+      return `If ${describeCondition(config)}`
     case 'mqtt.publish': {
       const topic = str(config.topic)
       return topic ? `Send a message to ${topic}` : 'Choose where to send it'
@@ -118,17 +158,8 @@ export function describeNode(type: string, config: Record<string, unknown>, enti
       return format && format !== 'auto' ? `Read it as ${format.toUpperCase()}` : 'Read it as data'
     }
     case 'data.filter': {
-      const rules = Array.isArray(config.rules) ? (config.rules as { field?: string; op?: string; value?: string }[]) : []
-      if (config.mode === 'expression') return str(config.expression) ? 'Keep items matching an expression' : 'Choose what to keep'
-      if (config.mode === 'jsonata') {
-        const j = str(config.jsonata)
-        return j ? `Keep items where ${j.length > 44 ? `${j.slice(0, 44)}…` : j}` : 'Choose what to keep'
-      }
-      const r = rules.find((x) => str(x.field))
-      if (!r) return 'Choose what to keep'
-      const op = OP_WORDS[r.op ?? 'equals'] ?? r.op
-      const more = rules.length > 1 ? ` (+${rules.length - 1})` : ''
-      return `Keep items where ${r.field} ${op}${['exists', 'not_exists'].includes(r.op ?? '') ? '' : ` ${r.value ?? ''}`}${more}`
+      const cond = describeCondition(config)
+      return cond === 'a condition holds' ? 'Choose what to keep' : `Keep items where ${cond}`
     }
     case 'data.map': {
       if (config.mode === 'jsonata') return str(config.expression) ? 'Reshape it with JSONata' : 'Choose how to reshape it'
@@ -179,6 +210,12 @@ export function nodeIcon(type: string): IconName {
       return 'clock'
     case 'trigger.manual':
       return 'hand'
+    case 'trigger.mqtt':
+      return 'inbox'
+    case 'ha.action':
+      return 'home'
+    case 'flow.if':
+      return 'branch'
     case 'mqtt.publish':
       return 'send'
     case 'http.download':

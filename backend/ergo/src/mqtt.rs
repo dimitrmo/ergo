@@ -1,24 +1,26 @@
-//! MQTT broker connection used by `mqtt.publish`.
+//! MQTT broker connection used by `mqtt.publish` and `trigger.mqtt`.
 //!
 //! The broker comes from the `mqtt_url` option: a URL, or `auto` for the
 //! Supervisor's service discovery (the Mosquitto add-on). MQTT is turned on
 //! only once ergo has connected to it; otherwise ergo runs without MQTT.
 //!
-//! For the MQTT page, the last messages ergo published are kept in memory,
-//! together with what arrives on a topic filter the page is watching.
+//! One connection serves everything: publishing, the topics that active
+//! workflows' MQTT triggers listen on, and the MQTT page, which keeps the last
+//! messages ergo sent and received in memory and can watch any topic filter.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use ergo_nodes::MqttPublisher;
+use ergo_nodes::{MqttPublisher, filter_covers, topic_matches, valid_topic_filter};
 use rumqttc::{AsyncClient, ConnectionError, Event, MqttOptions, Packet, QoS};
 use serde::Serialize;
 use serde_json::Value;
-use tracing::{info, warn};
+use tokio::sync::broadcast;
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MqttStatus {
@@ -34,7 +36,29 @@ pub struct Mqtt {
     connected: AtomicBool,
     error: RwLock<Option<String>>,
     monitor: Mutex<Monitor>,
+    /// Filters subscribed for MQTT triggers (none covering another).
+    triggers: Mutex<BTreeSet<String>>,
+    /// Every message received, for the trigger dispatcher.
+    incoming: broadcast::Sender<Incoming>,
+    /// The last message that matched more than one subscription, to drop the
+    /// copies a broker may send for each of them.
+    last_overlap: Mutex<Option<(Instant, String, Vec<u8>)>>,
 }
+
+/// A message from the broker.
+#[derive(Debug, Clone)]
+pub struct Incoming {
+    pub topic: String,
+    pub payload: Vec<u8>,
+    pub qos: u8,
+    /// Sent because it was the topic's retained message when we subscribed.
+    pub retain: bool,
+}
+
+/// Every subscription asks for QoS 2. A broker delivers at the lower of the
+/// publisher's QoS and the subscription's, so messages arrive (and show on
+/// the MQTT page) at the QoS they were sent with, and triggers fire once.
+const SUBSCRIBE_QOS: QoS = QoS::ExactlyOnce;
 
 /// Messages kept for the MQTT page; the oldest go first.
 const MONITOR_CAP: usize = 1000;
@@ -194,6 +218,9 @@ impl Mqtt {
             connected: AtomicBool::new(false),
             error: RwLock::new(reason),
             monitor: Mutex::default(),
+            triggers: Mutex::default(),
+            incoming: broadcast::channel(1).0,
+            last_overlap: Mutex::default(),
         })
     }
 
@@ -211,13 +238,16 @@ impl Mqtt {
         if let Some(user) = &broker.username {
             opts.set_credentials(user.clone(), broker.password.clone().unwrap_or_default());
         }
-        let (client, mut eventloop) = AsyncClient::new(opts, 64);
+        let (client, mut eventloop) = AsyncClient::new(opts, 256);
         let mqtt = Arc::new(Self {
             client: Some(client),
             broker: Some(format!("{}:{}", broker.host, broker.port)),
             connected: AtomicBool::new(false),
             error: RwLock::new(None),
             monitor: Mutex::default(),
+            triggers: Mutex::default(),
+            incoming: broadcast::channel(1024).0,
+            last_overlap: Mutex::default(),
         });
 
         let refused = Arc::new(AtomicBool::new(false));
@@ -230,21 +260,10 @@ impl Mqtt {
                         info!(broker = ?this.broker, "connected to MQTT broker");
                         this.connected.store(true, Ordering::Relaxed);
                         *this.error.write().unwrap() = None;
-                        // Clean sessions forget subscriptions; renew the watch.
-                        let filter = this.monitor.lock().unwrap().filter.clone();
-                        if let (Some(f), Some(c)) = (filter, &this.client) {
-                            let _ = c.try_subscribe(f, QoS::AtMostOnce);
-                        }
+                        // Clean sessions forget subscriptions; renew them all.
+                        this.resubscribe();
                     }
-                    Ok(Event::Incoming(Packet::Publish(p))) => {
-                        this.monitor.lock().unwrap().push(
-                            "received",
-                            &p.topic,
-                            &p.payload,
-                            qos_level(p.qos),
-                            p.retain,
-                        );
-                    }
+                    Ok(Event::Incoming(Packet::Publish(p))) => this.on_publish(&p),
                     Ok(_) => {}
                     Err(e) => {
                         if matches!(e, ConnectionError::ConnectionRefused(_)) {
@@ -300,6 +319,107 @@ impl Mqtt {
         Ok(mqtt)
     }
 
+    fn resubscribe(&self) {
+        let Some(client) = &self.client else { return };
+        let triggers = self.triggers.lock().unwrap().clone();
+        for f in &triggers {
+            if let Err(e) = client.try_subscribe(f.clone(), SUBSCRIBE_QOS) {
+                warn!(filter = %f, error = %e, "couldn't subscribe for an MQTT trigger");
+            }
+        }
+        let watch = self.monitor.lock().unwrap().filter.clone();
+        if let Some(f) = watch.filter(|f| !triggers.contains(f)) {
+            let _ = client.try_subscribe(f, SUBSCRIBE_QOS);
+        }
+    }
+
+    fn on_publish(&self, p: &rumqttc::Publish) {
+        // Overlapping subscriptions (say home/# and home/+/state) may each
+        // get a copy; keep the first.
+        let matching = {
+            let watch = self.monitor.lock().unwrap().filter.clone();
+            let triggers = self.triggers.lock().unwrap();
+            watch
+                .iter()
+                .chain(triggers.iter())
+                .filter(|f| topic_matches(f, &p.topic))
+                .count()
+        };
+        if matching > 1 {
+            let mut last = self.last_overlap.lock().unwrap();
+            if let Some((at, topic, payload)) = &*last
+                && at.elapsed() < Duration::from_millis(250)
+                && *topic == p.topic
+                && payload[..] == p.payload[..]
+            {
+                debug!(topic = %p.topic, "dropped a duplicate from overlapping subscriptions");
+                return;
+            }
+            *last = Some((Instant::now(), p.topic.clone(), p.payload.to_vec()));
+        }
+        self.monitor.lock().unwrap().push(
+            "received",
+            &p.topic,
+            &p.payload,
+            qos_level(p.qos),
+            p.retain,
+        );
+        // No receivers is fine: no MQTT trigger is active.
+        let _ = self.incoming.send(Incoming {
+            topic: p.topic.clone(),
+            payload: p.payload.to_vec(),
+            qos: qos_level(p.qos),
+            retain: p.retain,
+        });
+    }
+
+    /// Messages as they arrive, for MQTT triggers.
+    pub fn subscribe(&self) -> broadcast::Receiver<Incoming> {
+        self.incoming.subscribe()
+    }
+
+    /// Subscribes to exactly what active MQTT triggers need. Filters covered
+    /// by another one (home/a under home/#) aren't subscribed separately.
+    pub fn set_trigger_filters(&self, wanted: impl IntoIterator<Item = String>) {
+        let Some(client) = &self.client else { return };
+        let wanted: BTreeSet<String> = wanted.into_iter().collect();
+        let needed: BTreeSet<String> = wanted
+            .iter()
+            .filter(|f| !wanted.iter().any(|o| o != *f && filter_covers(o, f)))
+            .cloned()
+            .collect();
+        let watch = self.monitor.lock().unwrap().filter.clone();
+        let mut current = self.triggers.lock().unwrap();
+        for f in current.difference(&needed) {
+            // The page may still be watching it.
+            if watch.as_deref() != Some(f.as_str()) {
+                let _ = client.try_unsubscribe(f.clone());
+            }
+        }
+        for f in needed.difference(&current) {
+            if let Err(e) = client.try_subscribe(f.clone(), SUBSCRIBE_QOS) {
+                warn!(filter = %f, error = %e, "couldn't subscribe for an MQTT trigger");
+            }
+        }
+        if *current != needed {
+            info!(filters = ?needed, "MQTT trigger subscriptions");
+        }
+        *current = needed;
+    }
+
+    /// The newest message received on a topic `filter` matches, if any is
+    /// still in memory; a run started by hand replays it.
+    pub fn latest_received(&self, filter: &str) -> Option<MqttMessage> {
+        self.monitor
+            .lock()
+            .unwrap()
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.direction == "received" && topic_matches(filter, &m.topic))
+            .cloned()
+    }
+
     /// Messages after `after`; also keeps the current watch alive.
     pub fn messages(&self, after: u64) -> MonitorPage {
         let mut m = self.monitor.lock().unwrap();
@@ -327,7 +447,7 @@ impl Mqtt {
             return Err("no MQTT broker configured".into());
         };
         if let Some(f) = &filter {
-            validate_filter(f)?;
+            valid_topic_filter(f)?;
         }
         let old = {
             let mut m = self.monitor.lock().unwrap();
@@ -337,12 +457,14 @@ impl Mqtt {
         if old == filter {
             return Ok(());
         }
-        if let Some(old) = old {
+        // Filters MQTT triggers need stay subscribed (at their QoS).
+        let triggers = self.triggers.lock().unwrap().clone();
+        if let Some(old) = old.filter(|f| !triggers.contains(f)) {
             client.unsubscribe(old).await.map_err(|e| e.to_string())?;
         }
-        if let Some(f) = filter {
+        if let Some(f) = filter.filter(|f| !triggers.contains(f)) {
             client
-                .subscribe(f, QoS::AtMostOnce)
+                .subscribe(f, SUBSCRIBE_QOS)
                 .await
                 .map_err(|e| e.to_string())?;
         }
@@ -392,36 +514,9 @@ impl MqttPublisher for Mqtt {
     }
 }
 
-/// Checks a subscription filter the way brokers do, for a clear error here.
-fn validate_filter(f: &str) -> Result<(), String> {
-    if f.is_empty() {
-        return Err("the topic filter is empty".into());
-    }
-    let levels: Vec<&str> = f.split('/').collect();
-    for (i, level) in levels.iter().enumerate() {
-        if level.contains('#') && (*level != "#" || i != levels.len() - 1) {
-            return Err("# must be the last level on its own, as in home/#".into());
-        }
-        if level.contains('+') && *level != "+" {
-            return Err("+ must be a whole level, as in home/+/state".into());
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Broker, Monitor, PAYLOAD_CAP, validate_filter};
-
-    #[test]
-    fn checks_topic_filters() {
-        assert!(validate_filter("#").is_ok());
-        assert!(validate_filter("home/+/state").is_ok());
-        assert!(validate_filter("home/#").is_ok());
-        assert!(validate_filter("home/#/x").is_err());
-        assert!(validate_filter("home/a+").is_err());
-        assert!(validate_filter("").is_err());
-    }
+    use super::{Broker, Monitor, PAYLOAD_CAP};
 
     #[test]
     fn records_payloads() {

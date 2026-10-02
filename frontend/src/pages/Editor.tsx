@@ -15,7 +15,7 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, api, downloadExport, type Issue, type Run, type RunDetail, type RunNode, type Workflow } from '../api.ts'
+import { ApiError, api, downloadExport, type Issue, type NodeSchema, type Run, type RunDetail, type RunNode, type Workflow } from '../api.ts'
 import { Confirm } from '../components/Confirm.tsx'
 import { Icon } from '../components/Icon.tsx'
 import { TopBar } from '../components/TopBar.tsx'
@@ -28,6 +28,7 @@ import {
   type ErgoNode,
   freeSpot,
   GAP_X,
+  GAP_Y,
   NODE_H,
   NODE_W,
   nextId,
@@ -46,7 +47,8 @@ type Toast = { kind: 'ok' | 'error'; title: string; text?: string } | null
 /** How close (in px) a dropped step must be to a neighbour's height to snap into line. */
 const ALIGN_SNAP = 24
 
-type Chooser = { mode: 'trigger' } | { mode: 'step'; after: string } | null
+/** What the chooser adds: a trigger, or a step after `after` on its exit `port`. */
+type Chooser = { mode: 'trigger' } | { mode: 'step'; after: string; port?: string } | null
 
 function successText(detail: RunDetail): string {
   const last = [...detail.nodes].reverse().find((n) => n.node_type === 'mqtt.publish')
@@ -336,9 +338,14 @@ function EditorInner({ id }: { id: string }) {
     const chooser = how
     const nid = nextId(nodes)
     let position: { x: number; y: number }
+    // The exit it continues from: the one asked for, else the step's first.
+    const fromPorts = chooser.mode === 'step' ? (schemas.get(nodes.find((n) => n.id === chooser.after)!.data.nodeType)?.ports ?? ['out']) : []
+    const port = chooser.mode === 'step' ? (chooser.port ?? fromPorts[0] ?? 'out') : 'out'
     if (chooser.mode === 'step') {
       const from = nodes.find((n) => n.id === chooser.after)!
-      position = freeSpot(nodes, from.position.x + NODE_W + GAP_X, from.position.y)
+      // A side exit (an If's "no") starts its branch a row lower.
+      const below = fromPorts.indexOf(port) > 0 ? NODE_H + GAP_Y : 0
+      position = freeSpot(nodes, from.position.x + NODE_W + GAP_X, from.position.y + below)
     } else if (nodes.length) {
       const left = Math.min(...nodes.map((n) => n.position.x))
       position = freeSpot(nodes, left, Math.min(...nodes.map((n) => n.position.y)) + NODE_H)
@@ -348,7 +355,6 @@ function EditorInner({ id }: { id: string }) {
     const node: ErgoNode = { id: nid, type: 'ergo', position, selected: true, data: { nodeType: type, config: defaults(schema) } }
     setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), node])
     if (chooser.mode === 'step') {
-      const port = schemas.get(nodes.find((n) => n.id === chooser.after)!.data.nodeType)?.ports[0] ?? 'out'
       const c = { source: chooser.after, sourceHandle: port, target: nid }
       setEdges((es) => [...es, { ...c, id: edgeId(c) }])
     } else {
@@ -445,7 +451,7 @@ function EditorInner({ id }: { id: string }) {
     return s
   }, [nodes, runConfigs, results])
 
-  const connected = useMemo(() => new Set(edges.map((e) => e.source)), [edges])
+  const connected = useMemo(() => new Set(edges.map((e) => `${e.source}:${e.sourceHandle ?? 'out'}`)), [edges])
   const context = useMemo(
     () => ({
       schemas,
@@ -456,7 +462,7 @@ function EditorInner({ id }: { id: string }) {
       stale,
       issues: issuesByNode,
       connected,
-      onAddAfter: (nodeId: string) => setChooser({ mode: 'step', after: nodeId }),
+      onAddAfter: (nodeId: string, port?: string) => setChooser({ mode: 'step', after: nodeId, port }),
     }),
     [schemas, entities, results, shown, stale, issuesByNode, connected],
   )
@@ -478,11 +484,21 @@ function EditorInner({ id }: { id: string }) {
   // The selected step's input comes from the steps connected into it.
   const upstream = useMemo(() => {
     if (!selected) return []
-    const sources = new Set(edges.filter((e) => e.target === selected).map((e) => e.source))
-    return nodes
-      .filter((n) => sources.has(n.id))
-      .map((n) => schemas.get(n.data.nodeType))
-      .filter((s): s is NonNullable<typeof s> => !!s)
+    // An If passes its input on, so look through it to the steps before it.
+    const found: NodeSchema[] = []
+    const seen = new Set<string>()
+    const visit = (id: string) => {
+      for (const e of edges.filter((x) => x.target === id)) {
+        if (seen.has(e.source)) continue
+        seen.add(e.source)
+        const n = nodes.find((x) => x.id === e.source)
+        const schema = n && schemas.get(n.data.nodeType)
+        if (schema?.type === 'flow.if') visit(e.source)
+        else if (schema) found.push(schema)
+      }
+    }
+    visit(selected)
+    return found
   }, [selected, edges, nodes, schemas])
   const problems = issues.filter((i) => i.severity === 'error')
   const drawer = selectedNode ? 'step' : historyOpen ? 'history' : null

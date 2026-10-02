@@ -291,7 +291,9 @@ impl Engine {
                 render_config_except(&node.config, &template_ctx, &raw)
                     .map_err(|e| NodeError::new(ErrorKind::Template, e))
             };
-            let ctx = RunCtx::new(&req.trigger, &steps).with_run(&run.id, self.temp_dir.as_deref());
+            let ctx = RunCtx::new(&req.trigger, &steps)
+                .with_run(&run.id, self.temp_dir.as_deref())
+                .with_workflow(&run.workflow_id);
             let result = match &config {
                 Ok(cfg) => match tokio::time::timeout(
                     self.node_timeout,

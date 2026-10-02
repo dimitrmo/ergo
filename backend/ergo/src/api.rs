@@ -82,11 +82,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/runs/{id}", get(get_run))
         .route("/api/nodes", get(nodes))
         .route("/api/entities", get(entities))
+        .route("/api/ha/actions", get(ha_actions))
         .route("/api/cron/preview", post(cron_preview))
         .route("/api/db/tables", get(db_tables))
         .route("/api/db/tables/{name}", get(db_rows))
         .route("/api/mqtt/messages", get(mqtt_messages).delete(mqtt_clear))
         .route("/api/mqtt/watch", post(mqtt_watch))
+        .route("/api/mqtt/publish", post(mqtt_publish))
         .with_state(state)
 }
 
@@ -310,6 +312,31 @@ async fn run_workflow(
                 "to_state": current,
             })
         }
+        "trigger.mqtt" => {
+            // Replays the newest message seen on the topic, if there is one.
+            let filter = node.config["topic"].as_str().unwrap_or_default().trim();
+            let latest = s.mqtt.as_ref().and_then(|m| m.latest_received(filter));
+            let mut event = match &latest {
+                Some(m) if !m.binary => {
+                    crate::triggers::mqtt_event(&m.topic, m.payload.as_bytes(), m.qos)
+                }
+                // No message yet: a wildcard-free filter is the topic itself.
+                _ => crate::triggers::mqtt_event(
+                    if filter.contains(['+', '#']) {
+                        ""
+                    } else {
+                        filter
+                    },
+                    b"",
+                    0,
+                ),
+            };
+            event["time"] = json!(time);
+            event["node"] = json!(node.id);
+            event["id"] = json!(node.label);
+            event["simulated"] = json!(true);
+            event
+        }
         "trigger.cron" => {
             json!({
                 "kind": "cron", "time": time, "node": node.id, "id": node.label, "simulated": true,
@@ -454,6 +481,14 @@ async fn entities(State(s): AppStateRef) -> ApiResult {
     Ok(Json(json!(s.ha.entities())))
 }
 
+/// HA's action catalog, for the action picker.
+async fn ha_actions(State(s): AppStateRef) -> ApiResult {
+    s.ha.services()
+        .await
+        .map(Json)
+        .map_err(|e| ApiError::bad(StatusCode::SERVICE_UNAVAILABLE, e))
+}
+
 #[derive(Deserialize)]
 struct CronBody {
     cron: String,
@@ -516,6 +551,34 @@ async fn mqtt_messages(State(s): AppStateRef, Query(q): Query<MessagesQuery>) ->
 async fn mqtt_clear(State(s): AppStateRef) -> ApiResult {
     mqtt(&s)?.clear();
     Ok(Json(json!({ "cleared": true })))
+}
+
+#[derive(Deserialize)]
+struct PublishBody {
+    topic: String,
+    #[serde(default)]
+    payload: String,
+    #[serde(default)]
+    qos: u8,
+    #[serde(default)]
+    retain: bool,
+}
+
+/// Sends a message by hand, from the MQTT page.
+async fn mqtt_publish(State(s): AppStateRef, Json(body): Json<PublishBody>) -> ApiResult {
+    use ergo_nodes::MqttPublisher;
+    let topic = body.topic.trim();
+    if topic.is_empty() || topic.contains(['+', '#']) {
+        return Err(ApiError::bad(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "Publish to one topic, without + or #.",
+        ));
+    }
+    mqtt(&s)?
+        .publish(topic, body.payload.into_bytes(), body.qos.min(2), body.retain)
+        .await
+        .map_err(|e| ApiError::bad(StatusCode::BAD_GATEWAY, e))?;
+    Ok(Json(json!({ "published": topic })))
 }
 
 #[derive(Deserialize)]
