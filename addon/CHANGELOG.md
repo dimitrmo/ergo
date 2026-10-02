@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.7
+
+### Changed
+
+- Make MQTT optional
+
 ## 0.0.6
 
 ### Changed
