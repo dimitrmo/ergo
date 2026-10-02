@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.5
+
+### Changed
+
+- Include MQTT Tab
+
 ## 0.0.4
 
 ### Changed
