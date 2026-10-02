@@ -108,6 +108,18 @@ export function Workflows() {
     window.location.hash = `#/w/${workflow.id}`
   }
 
+  const duplicate = async (wf: Workflow) => {
+    setError(null)
+    setNotice(null)
+    try {
+      const { workflow } = await api.duplicateWorkflow(wf.id)
+      setNotice(`Made “${workflow.name}”. It's a draft until you go live.`)
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const toggle = async (wf: Workflow) => {
     setWorkflows((list) => list?.map((w) => (w.id === wf.id ? { ...w, enabled: !w.enabled } : w)) ?? null)
     await api.setEnabled(wf.id, !wf.enabled)
@@ -209,7 +221,7 @@ export function Workflows() {
                         onClick={() => toggle(wf)}
                       />
                     </div>
-                    <p className="wf-sentence">
+                    <p className="wf-sentence" title={`When ${when}, then ${then}`}>
                       <span className="faint">When</span> {when}
                       <br />
                       <span className="faint">then</span> {then}
@@ -235,9 +247,17 @@ export function Workflows() {
                         </button>
                       )}
                       <span className="spacer" />
+                      <button
+                        className="btn ghost icon card-action"
+                        onClick={() => duplicate(wf)}
+                        aria-label={`Duplicate ${wf.name}`}
+                        title="Duplicate workflow"
+                      >
+                        <Icon name="copy" size={17} />
+                      </button>
                       {!(wf.enabled && wf.active_version) && (
                         <button
-                          className="btn ghost icon card-delete"
+                          className="btn ghost icon card-action card-delete"
                           onClick={() => setDeleting(wf)}
                           aria-label={`Delete ${wf.name}`}
                           title="Delete workflow"

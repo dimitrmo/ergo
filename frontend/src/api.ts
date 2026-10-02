@@ -247,6 +247,7 @@ export const api = {
     call<WorkflowResponse>('POST', 'api/workflows', { name, draft }),
   saveWorkflow: (id: string, patch: { name?: string; draft?: Graph }) =>
     call<WorkflowResponse>('PUT', `api/workflows/${id}`, patch),
+  duplicateWorkflow: (id: string) => call<WorkflowResponse>('POST', `api/workflows/${id}/duplicate`),
   deleteWorkflow: (id: string) => call<unknown>('DELETE', `api/workflows/${id}`),
   activate: (id: string) => call<WorkflowResponse>('POST', `api/workflows/${id}/activate`),
   setEnabled: (id: string, enabled: boolean) =>

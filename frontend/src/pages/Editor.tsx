@@ -287,6 +287,16 @@ function EditorInner({ id }: { id: string }) {
     }
   }
 
+  const duplicateThis = async () => {
+    try {
+      await save()
+      const { workflow: copy } = await api.duplicateWorkflow(id)
+      window.location.hash = `#/w/${copy.id}`
+    } catch (e) {
+      setToast({ kind: 'error', title: "Couldn't duplicate it", text: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   const toggleEnabled = async () => {
     if (!workflow) return
     const r = await api.setEnabled(id, !workflow.enabled)
@@ -532,6 +542,11 @@ function EditorInner({ id }: { id: string }) {
             <button className="switch" role="switch" aria-checked={workflow.enabled} onClick={toggleEnabled} />
             <span>{workflow.enabled ? 'On' : 'Off'}</span>
           </label>
+        )}
+        {workflow && (
+          <button className="btn ghost icon" onClick={duplicateThis} aria-label="Duplicate workflow" title="Make a copy of this workflow">
+            <Icon name="copy" size={18} />
+          </button>
         )}
         {workflow && (
           <button className="btn ghost icon" onClick={exportThis} aria-label="Export workflow" title="Download this workflow as a file">

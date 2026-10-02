@@ -71,6 +71,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/workflows/{id}/enable", post(enable))
         .route("/api/workflows/{id}/disable", post(disable))
         .route("/api/workflows/{id}/run", post(run_workflow))
+        .route("/api/workflows/{id}/duplicate", post(duplicate_workflow))
         .route("/api/export", get(export_workflows))
         .route("/api/import", post(import_workflows))
         .route("/api/runs", get(list_runs))
@@ -198,6 +199,13 @@ async fn delete_workflow(State(s): AppStateRef, Path(id): Path<String>) -> ApiRe
     }
     s.triggers.reload()?;
     Ok(Json(json!({ "deleted": id })))
+}
+
+async fn duplicate_workflow(State(s): AppStateRef, Path(id): Path<String>) -> ApiResult {
+    let copy =
+        s.db.duplicate_workflow(&id)?
+            .ok_or_else(ApiError::not_found)?;
+    workflow_json(&s, &copy)
 }
 
 async fn activate(State(s): AppStateRef, Path(id): Path<String>) -> ApiResult {

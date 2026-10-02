@@ -1,6 +1,8 @@
 .wf-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  /* Every row as tall as the tallest, so all cards match. */
+  grid-auto-rows: 1fr;
   gap: 12px;
 }
 
@@ -71,12 +73,19 @@
   color: var(--text-3);
 }
 
+/* Always three lines tall; longer descriptions end in an ellipsis. */
 .wf-sentence {
+  display: -webkit-box;
   flex: 1;
+  height: calc(3 * 1.6em);
   margin: 10px 0;
+  overflow: hidden;
   color: var(--text);
   font-size: 13.5px;
   line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .wf-foot {
@@ -157,25 +166,34 @@
   color: var(--accent);
 }
 
+/* Laid over the description, so a run doesn't change the card's height.
+   The tints are translucent, so they sit on the solid card color. */
 .run-banner {
-  position: relative;
+  position: absolute;
+  top: 54px;
+  right: 14px;
+  left: 14px;
   z-index: 1;
-  margin-bottom: 14px;
+  display: -webkit-box;
   padding: 10px 14px;
+  overflow: hidden;
   border-radius: 12px;
   background: var(--panel-3);
   color: var(--text-2);
   font-weight: 500;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   animation: pop-in 180ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
 
 .run-banner.ok {
-  background: var(--ok-soft);
+  background: linear-gradient(var(--ok-soft), var(--ok-soft)), var(--panel);
   color: var(--ok);
 }
 
 .run-banner.err {
-  background: var(--err-soft);
+  background: linear-gradient(var(--err-soft), var(--err-soft)), var(--panel);
   color: var(--err);
 }
 
@@ -193,7 +211,7 @@
   text-overflow: ellipsis;
 }
 
-.card-delete {
+.card-action {
   position: relative;
   z-index: 1;
   width: 32px;

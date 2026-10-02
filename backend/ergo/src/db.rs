@@ -256,6 +256,51 @@ impl Db {
         Ok(created)
     }
 
+    /// Copies a workflow's draft into a new workflow named "<name> (copy)",
+    /// or "(copy 2)" and so on when that's taken. The copy starts as a draft,
+    /// with no live version and no runs. Returns its id, or None if `id`
+    /// doesn't exist.
+    pub fn duplicate_workflow(&self, id: &str) -> Result<Option<String>> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let Some((name, draft)) = tx
+            .query_row(
+                "SELECT name, draft FROM workflows WHERE id = ?1",
+                [id],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )
+            .optional()?
+        else {
+            return Ok(None);
+        };
+        let base = copy_base(&name);
+        let mut n = 1;
+        let name = loop {
+            let candidate = if n == 1 {
+                format!("{base} (copy)")
+            } else {
+                format!("{base} (copy {n})")
+            };
+            let taken: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM workflows WHERE name = ?1)",
+                [&candidate],
+                |r| r.get(0),
+            )?;
+            if !taken {
+                break candidate;
+            }
+            n += 1;
+        };
+        let new_id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+        tx.execute(
+            "INSERT INTO workflows (id, name, enabled, draft, created_at, updated_at)
+             VALUES (?1, ?2, 1, ?3, ?4, ?4)",
+            params![new_id, name, draft, now()],
+        )?;
+        tx.commit()?;
+        Ok(Some(new_id))
+    }
+
     /// Saves the draft and/or name. Returns false if the workflow doesn't exist.
     pub fn save_draft(&self, id: &str, name: Option<&str>, draft: Option<&Graph>) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
@@ -633,6 +678,26 @@ impl RunSink for Db {
     }
 }
 
+/// "Lights (copy 2)" -> "Lights", so copies of copies don't pile up suffixes.
+fn copy_base(name: &str) -> &str {
+    let Some(rest) = name.strip_suffix(')') else {
+        return name;
+    };
+    let Some(i) = rest.rfind(" (copy") else {
+        return name;
+    };
+    let tail = &rest[i + " (copy".len()..];
+    if tail.is_empty()
+        || tail
+            .strip_prefix(' ')
+            .is_some_and(|d| d.parse::<u32>().is_ok())
+    {
+        &name[..i]
+    } else {
+        name
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -746,6 +811,39 @@ mod tests {
             "imports are drafts until they go live"
         );
         assert_eq!(count(&db, "workflows"), 3);
+    }
+
+    #[test]
+    fn duplicate_copies_the_draft_under_a_free_name() {
+        let db = temp_db();
+        let graph = Graph::default();
+        db.create_workflow("wf", "Lights", &graph).unwrap();
+        db.activate("wf", &graph).unwrap();
+
+        let first = db.duplicate_workflow("wf").unwrap().unwrap();
+        let second = db.duplicate_workflow("wf").unwrap().unwrap();
+        let third = db.duplicate_workflow(&first).unwrap().unwrap();
+        let name = |id: &str| db.get_workflow(id).unwrap().unwrap().name;
+        assert_eq!(name(&first), "Lights (copy)");
+        assert_eq!(name(&second), "Lights (copy 2)");
+        assert_eq!(name(&third), "Lights (copy 3)");
+
+        let copy = db.get_workflow(&first).unwrap().unwrap();
+        assert_eq!(
+            copy.active_version, None,
+            "copies are drafts until they go live"
+        );
+        assert_eq!(copy.draft, graph);
+        assert!(db.duplicate_workflow("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn copy_base_strips_only_copy_suffixes() {
+        assert_eq!(copy_base("Lights (copy)"), "Lights");
+        assert_eq!(copy_base("Lights (copy 12)"), "Lights");
+        assert_eq!(copy_base("Lights (copycat)"), "Lights (copycat)");
+        assert_eq!(copy_base("Lights (copy x)"), "Lights (copy x)");
+        assert_eq!(copy_base("Lights"), "Lights");
     }
 
     #[test]
