@@ -53,7 +53,7 @@ export function AddStep({
           </button>
         )}
       </div>
-      <div className="chooser-grid">
+      <div className={`chooser-grid${mode === 'trigger' ? ' two-up' : ''}`}>
         {items.map((s) => (
           <button key={s.type} className={`choice kind-${s.kind}`} onClick={() => onPick(s.type)}>
             <span className="choice-icon">

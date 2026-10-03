@@ -462,6 +462,17 @@
   gap: 12px;
 }
 
+/* The four triggers read best as a tidy 2x2. */
+.chooser-grid.two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 520px) {
+  .chooser-grid.two-up {
+    grid-template-columns: 1fr;
+  }
+}
+
 .choice {
   display: flex;
   flex-direction: column;
