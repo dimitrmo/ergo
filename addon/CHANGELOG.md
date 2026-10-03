@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.11
+
+### Changed
+
+- Web push
+
 ## 0.0.10
 
 ### Changed
