@@ -6,89 +6,156 @@
 
 <p align="center"><em>Something happens at home. Ergo, something gets done.</em></p>
 
-Ergo is a lightweight visual workflow builder for [Home Assistant](https://www.home-assistant.io/),
-in the spirit of n8n but made for the home: a Rust backend and a React Flow editor, packaged as a
-Home Assistant add-on that lives in your sidebar.
+<p align="center">
+  <strong>The friendliest way to automate your home with Home Assistant.</strong><br>
+  No code and no YAML. Just say what should happen.
+</p>
 
-- **Triggers:** an entity changing state (in real time, over HA's WebSocket API), a schedule in
-  HA's time zone, an MQTT message, or a button press.
-- **Steps:** Home Assistant actions (any `domain.action`), **If** with yes/no branches, MQTT
-  publish, web requests and downloads, and data steps (parse, filter, map, compose).
-- **Built to be friendly:** workflows read as sentences, steps are added with **+**, schedules
-  are picked from presets, and **Try it** shows what each step did.
-- **Built to be safe:** edits are drafts until you go live, runs are recorded step by step,
-  and the UI is reachable only through Home Assistant.
+---
 
-## Install
+Ergo lives in your Home Assistant sidebar. With it you build automations by snapping steps
+together, and each one reads like a plain sentence:
 
-1. In Home Assistant, open **Settings → Add-ons → Add-on store → ⋮ → Repositories** and add
-   `https://github.com/dimitrmo/ergo`.
-2. Install **Ergo**, start it, and open **Ergo** in the sidebar.
-3. For MQTT steps, install the Mosquitto broker add-on; Ergo finds it automatically.
+> **When** the front door opens after sunset, **turn on** the hallway light and **send** a
+> notification to my phone.
 
-The add-on documentation (options, troubleshooting) is in [`addon/DOCS.md`](addon/DOCS.md).
+If you can describe it, you can build it.
 
-## How it fits together
+<p align="center">
+  <img src="docs/screenshots/workflows.png" alt="Your workflows, each summed up in a plain sentence">
+</p>
 
-```
-Home Assistant ── WebSocket ──► ergo (Rust) ──► MQTT broker
-                                   ▲
-HA sidebar ── Ingress ──► nginx ───┘  (static UI + /api proxy, Ingress-only)
-```
+## Everything you can build with
 
-| Part | What it is |
+Every workflow starts with **one trigger** and then runs as many **steps** as you like.
+
+### 4 ways to start
+
+| Trigger | Starts the workflow… | For example |
+| --- | --- | --- |
+| 🔄 **State change** | when a light, sensor, switch or person changes | *When anyone gets home…* |
+| ⏰ **Schedule** | at set times: every morning, on weekdays, every few minutes | *Every weekday at 7:00…* |
+| 📡 **MQTT message** | when a message arrives, like a smart button press | *When the bedside button is double-pressed…* |
+| 👆 **Manual** | only when you press **Try it** | *Whenever I want to run "movie night"…* |
+
+### 9 kinds of steps
+
+| Step | What it does |
 | --- | --- |
-| `backend/ergo-core` | Workflow model, validation, templating (MiniJinja), engine |
-| `backend/ergo-nodes` | Node types: triggers, HA actions, If, MQTT, HTTP and data steps |
-| `backend/ergo` | The binary: HA client, MQTT, triggers, SQLite storage, REST API |
-| `frontend` | Vite + React + React Flow editor, built as static files |
-| `addon` | The HA add-on: Dockerfile, nginx config, `config.yaml`, docs |
-| `dev` | Local Home Assistant + Mosquitto, onboarding and deploy scripts |
-| `branding` | Logo, icons and the animated `ErgoLogo` component |
+| 🏠 **HA action** | Turns on a light, sets a thermostat, notifies your phone: any Home Assistant action |
+| 🔀 **If** | Goes one way when something is true and another way when it isn't |
+| 📤 **MQTT publish** | Sends a message to your smart gadgets |
+| 🌐 **Web request** | Calls a web service or webhook, such as IFTTT or a Discord bot |
+| ⬇️ **Download** | Fetches a feed, file or web page |
+| 🧩 **Parse** | Turns what you downloaded into information the next steps can use |
+| 🔍 **Filter** | Keeps only the items you care about |
+| 🗂️ **Map** | Picks out and renames just the details you need |
+| ✍️ **Compose** | Writes a message using information from earlier steps |
 
-Workflows, versions and run history live in Ergo's own SQLite database (`/data/ergo.db`), which
-HA backups include. Run history is kept for 7 days and at most 1,000 runs by default.
+## Why you'll love it
 
-## Development
+### ✨ So simple anyone at home can use it
+- **Workflows read like sentences.** Every automation is summed up in plain English, so you
+  can tell what it does at a glance.
+- **Press +, pick what's next.** Big, clear choices with a short explanation for each. No
+  menus to dig through.
+- **Pick devices by name.** Search your lights, sensors, switches and people by name. You
+  never have to remember an ID.
+- **Schedules without the head-scratching.** Choose *Every day*, *Weekdays*, *Weekends*,
+  *Once a week*, *Every hour* or *Every few minutes*, set a time, and Ergo shows exactly when
+  it will run next.
 
-Requirements: Rust (stable), Node 24+, Docker, and [`cross`](https://github.com/cross-rs/cross)
-for building the add-on.
+### ⚡ Start automations any way you like
+- **When something changes:** a light turns on, a door opens, a sensor reads a new value, or
+  someone gets home. Ergo reacts instantly.
+- **At set times:** wake-up routines, bedtime routines, weekly reminders.
+- **When you press a button,** from a smart button, a remote, or anything else that sends
+  MQTT messages.
+- **Only when you say so:** keep a workflow on standby and run it yourself.
 
-```sh
-make dev-up          # start a throwaway Home Assistant (:8123) and Mosquitto (:1883)
-make dev-bootstrap   # onboard it (user: dev) and write .env with a token
-make dev             # run the backend against it (:8100)
-make ui-dev          # run the editor with hot reload (:5173)
-make dev-sidebar     # optional: add Ergo to the dev HA's sidebar
-make mqtt-watch      # optional: print every MQTT message
-```
+### 🏠 Do just about anything
+- **Control your whole home:** lights, thermostats, covers, media players, scenes and
+  notifications. Anything Home Assistant can do, Ergo can do.
+- **Make decisions:** *if* it's raining, close the blinds; *otherwise* open them. Each choice
+  can lead to its own steps.
+- **Reach beyond your home:** fetch the weather, a news feed, or any web service, and use
+  what comes back.
+- **Write your own messages:** build notifications from live information, like *"The garage
+  has been open for 10 minutes."*
+- **Pick out what matters:** keep only the items you care about from a feed or list and
+  ignore the rest.
 
-Checks, as CI runs them:
+### 🧪 Try before you trust
+- **Try it** runs a workflow right away and shows what each step did, step by step.
+- **Your changes are drafts until you go live,** so a half-finished edit never touches the
+  running version.
+- **Run history** keeps a record of every time a workflow ran, what it saw, and what it did,
+  which makes "why did the lights do that?" easy to answer.
 
-```sh
-make lint
-make test
-```
+### 🛡️ Safe by design
+- **No runaway loops.** A workflow is never set off by its own actions, so "when the light
+  changes, toggle it" can't flicker forever.
+- **Private to your Home Assistant.** Ergo can only be opened from inside Home Assistant, by
+  people who can already sign in.
+- **Backed up with everything else.** Your workflows are saved in Home Assistant's regular
+  backups.
 
-### Deploying to your own Home Assistant
+### 🧰 Handy extras
+- **Turn workflows on and off** with a single switch. Nothing gets deleted.
+- **Duplicate** a workflow to make a variation in seconds.
+- **Export and import** workflows to keep a copy or share them with a friend.
+- **A live view of MQTT messages,** so you can see what your buttons and gadgets are saying
+  and send a message again with one click.
+- **A status bar** that always shows whether everything is connected, and tells you in plain
+  words if something isn't.
 
-```sh
-echo 'ERGO_DEPLOY_HOST=root@homeassistant.local' >> .env
-make deploy ARCH=aarch64   # or amd64
-```
+## Take a look
 
-This cross-compiles the backend, builds the UI, copies the add-on to `/addons/ergo` over SSH
-and installs or rebuilds it there. The Pi only copies files, so the rebuild takes seconds.
+### Building a workflow
 
-### Releases
+| | |
+| --- | --- |
+| ![Pick how a workflow starts](docs/screenshots/trigger-chooser.png) **Pick how it starts.** Four big, friendly choices. | ![Pick what happens next](docs/screenshots/step-chooser.png) **Pick what happens next.** Every step explains itself. |
+| ![A workflow on the canvas](docs/screenshots/editor.png) **See the whole thing at a glance.** Each step reads like a sentence. | ![Yes and no branches](docs/screenshots/if-branches.png) **Make decisions.** Go one way or the other with **If**. |
+| ![Name a new workflow](docs/screenshots/new-workflow.png) **Start fresh in seconds.** Give it a name and go. | ![Workflow list](docs/screenshots/workflows.png) **All your workflows in one place.** Switch them on and off with a tap. |
 
-Every green push to `master` is released. CI bumps the version in `backend/Cargo.toml`,
-`frontend/package.json` and `addon/config.yaml` (patch by default; put `#minor` or `#major` in a
-commit message for a bigger bump), adds the commit subjects to `addon/CHANGELOG.md`, and commits
-all of it as `Release X.Y.Z [skip ci]`. It then pushes both images to GHCR, tags that commit
-`vX.Y.Z` and creates the GitHub release; Home Assistant then offers the update. Don't change
-the versions by hand.
+### Setting up each step
 
-## Licence
+| | |
+| --- | --- |
+| ![Watch a device](docs/screenshots/state-trigger.png) **Watch any device** and choose the change you care about. | ![Search your devices](docs/screenshots/entity-picker.png) **Find devices by name,** with their current state. |
+| ![Control your home](docs/screenshots/ha-action.png) **Control your home:** pick an action and what it acts on. | ![Schedules made simple](docs/screenshots/schedule.png) **Schedules without the guesswork,** plus the next times it will run. |
+| ![Conditions](docs/screenshots/if-panel.png) **Set a condition** with simple rules. | ![Write a message](docs/screenshots/compose-output.png) **Write messages** with live information and see the result. |
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+### Testing and history
+
+| | |
+| --- | --- |
+| ![What a step received](docs/screenshots/compose-input.png) **See what each step received** and what it did. | ![Run history](docs/screenshots/history.png) **Every run is recorded,** whatever started it. |
+| ![Replaying a run](docs/screenshots/history-run.png) **Replay any run** on the canvas, step by step. | ![Run now](docs/screenshots/run-now-confirm.png) **Run manual workflows** from the list, with a quick check first. |
+
+### Behind the scenes
+
+| | |
+| --- | --- |
+| ![MQTT messages](docs/screenshots/mqtt.png) **A live view of MQTT messages** from your buttons and gadgets. | ![Send an MQTT message](docs/screenshots/mqtt-publish.png) **Send a message yourself** to test a device. |
+| ![Database](docs/screenshots/database.png) **Look inside everything Ergo stores,** read-only. | ![Run records](docs/screenshots/database-runs.png) **Browse past runs** in detail. |
+| ![Status](docs/screenshots/status.png) **Check the connections** at a glance. | ![Delete safely](docs/screenshots/delete-confirm.png) **No accidents.** Live workflows can't be deleted, and Ergo always asks first. |
+
+## Install in two minutes
+
+1. In Home Assistant, open **Settings → Add-ons → Add-on store**, click the **⋮** menu
+   (top right) and choose **Repositories**.
+2. Paste `https://github.com/dimitrmo/ergo` and click **Add**.
+3. Find **Ergo** in the store, click **Install**, then **Start**.
+4. Open **Ergo** from the sidebar and create your first workflow.
+
+Have smart buttons or gadgets that use MQTT? Install the **Mosquitto broker** add-on too, and
+Ergo will find it automatically.
+
+Need help? See the [add-on guide](addon/DOCS.md).
+
+---
+
+<p align="center">Free and open source under the <a href="LICENSE-MIT">MIT</a> or
+<a href="LICENSE-APACHE">Apache-2.0</a> licence.</p>
