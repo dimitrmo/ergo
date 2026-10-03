@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.9
+
+### Changed
+
+- CSS issue
+
 ## 0.0.8
 
 ### Changed
