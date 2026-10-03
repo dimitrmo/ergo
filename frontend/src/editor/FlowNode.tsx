@@ -11,12 +11,28 @@ function size(b: number): string {
   return `${(b / 1024 / 1024).toFixed(1)} MB`
 }
 
+/** 1500 -> "1.5 s", 90000 -> "1 min 30 s". */
+function seconds(ms: number): string {
+  const s = Math.round(ms / 100) / 10
+  if (s < 60) return `${s} s`
+  const m = Math.floor(s / 60)
+  const rest = Math.round(s % 60)
+  return m < 60 ? `${m} min${rest ? ` ${rest} s` : ''}` : `${Math.floor(m / 60)} h ${m % 60} min`
+}
+
 function resultText(nodeType: string, r: RunNode): string {
   if (r.error) return r.error.message
   if (nodeType.startsWith('trigger.')) return (r.output as { simulated?: boolean })?.simulated ? 'Started (test)' : 'Started'
   if (nodeType === 'mqtt.publish') return `Sent · ${r.duration_ms} ms`
   if (nodeType === 'flow.if') return r.port === 'true' ? 'Yes, it holds' : 'No, it doesn’t'
   if (nodeType === 'ha.action') return `Done · ${r.duration_ms} ms`
+  if (nodeType === 'ha.notify') return `Sent · ${r.duration_ms} ms`
+  if (nodeType === 'push.send') {
+    const n = ((r.output as { sent?: unknown[] })?.sent ?? []).length
+    return `Sent to ${n} browser${n === 1 ? '' : 's'}`
+  }
+  if (nodeType === 'flow.delay') return `Waited ${seconds(r.duration_ms)}`
+  if (nodeType === 'flow.wait') return r.port === 'timeout' ? `Gave up after ${seconds(r.duration_ms)}` : `Reached after ${seconds(r.duration_ms)}`
   const out = (r.output ?? {}) as { status?: number; size?: number; count?: number }
   if (nodeType === 'http.request') return `${out.status} · ${r.duration_ms} ms`
   if (nodeType === 'http.download') return `${out.status} · ${size(out.size ?? 0)} · ${r.duration_ms} ms`

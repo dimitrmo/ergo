@@ -5,9 +5,10 @@ a trigger and runs steps:
 
 - **Triggers:** an entity changing state (in real time), a schedule, an MQTT
   message, or the Run button.
-- **Steps:** Home Assistant actions (turn on a light, notify your phone, any
-  `domain.action`), **If** to go one way or another, MQTT publish, web
-  requests, and data steps that parse, filter, map and compose.
+- **Steps:** Home Assistant actions (turn on a light, any `domain.action`),
+  **Notify**, **Web push**, **If** to go one way or another, **Delay**, **Wait until**,
+  MQTT publish, web requests, and data steps that parse, filter, map and
+  compose.
 
 ## Home Assistant actions
 
@@ -24,6 +25,39 @@ see those changes.
 **If** checks a condition (rules, a template, or JSONata) on the data it
 receives and continues from **yes** or **no**. The steps after it get the same
 data the If got.
+
+Besides value rules, an If rule can check **the time** (a window such as
+22:00 to 07:00, which may cross midnight), **the day** of the week, or **the
+sun** (after sunset, before sunrise, down or up). They use Home Assistant's
+time zone; sun rules need its Sun integration (`sun.sun`).
+
+## Delay and Wait until
+
+**Delay** pauses the run for up to 24 hours. **Wait until** pauses it until an
+entity reaches a state, then continues from **reached**; if that doesn't happen
+within the time you set (up to 24 hours), it continues from **timed out**.
+Both pass their input on unchanged. While a run waits, the same workflow
+doesn't start again, and restarting the add-on ends the wait (the run is
+marked interrupted).
+
+## Notify
+
+**Notify** sends a title and a message through a `notify.*` action, such as
+your phone's `notify.mobile_app_…` from the Companion app.
+
+## Web push
+
+**Web push** sends a notification straight to browsers, with no Home Assistant
+notifier or app involved. Open a Web push step in the browser that should get
+them and press **Turn on here**; **Send a test** checks it. Every notification
+is titled **Ergo** and shows the step's message. **Urgency** (very low, low,
+normal, high) tells devices on battery how soon to deliver it; high ones stay
+on screen until dismissed.
+
+Browsers only allow this on secure pages, so Home Assistant must be opened
+over HTTPS (Home Assistant Cloud, or your own certificate). Ergo keeps its
+signing key in `/data/push.key`; HA backups include it. Browsers that turn
+notifications off are forgotten the next time a push to them fails.
 
 ## Getting started
 

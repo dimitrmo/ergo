@@ -155,6 +155,46 @@ export function EntityPicker({
   )
 }
 
+const UNITS: [string, string][] = [
+  ['seconds', 'Seconds'],
+  ['minutes', 'Minutes'],
+  ['hours', 'Hours'],
+]
+
+/** A number and a unit (seconds, minutes, hours), as Delay and Wait until use them. */
+export function DurationField({
+  amount,
+  unit,
+  onAmount,
+  onUnit,
+}: {
+  amount: unknown
+  unit: unknown
+  onAmount: (v: number | string) => void
+  onUnit: (v: string) => void
+}) {
+  const u = typeof unit === 'string' && unit ? unit : 'minutes'
+  return (
+    <div className="duration">
+      <input
+        className="input duration-amount"
+        type="number"
+        min={0}
+        step="any"
+        value={amount == null ? '' : String(amount)}
+        onChange={(e) => onAmount(e.target.value === '' ? '' : Number(e.target.value))}
+      />
+      <div className="chips">
+        {UNITS.map(([v, l]) => (
+          <button key={v} className={`chip${u === v ? ' on' : ''}`} onClick={() => onUnit(v)}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** "Changes to" as chips: common states for the entity, Anything, or your own. */
 export function StateChips({
   value,
@@ -165,7 +205,8 @@ export function StateChips({
   value: string
   onChange: (v: string) => void
   entity?: Entity
-  anyLabel: string
+  /** The "any state" chip; left out when a state must be picked. */
+  anyLabel?: string
 }) {
   const suggested = suggestedStates(entity)
   const custom = !!value && !suggested.includes(value)
@@ -173,9 +214,11 @@ export function StateChips({
   return (
     <>
       <div className="chips">
-        <button className={`chip${!value && !typing ? ' on' : ''}`} onClick={() => (setTyping(false), onChange(''))}>
-          {anyLabel}
-        </button>
+        {anyLabel && (
+          <button className={`chip${!value && !typing ? ' on' : ''}`} onClick={() => (setTyping(false), onChange(''))}>
+            {anyLabel}
+          </button>
+        )}
         {suggested.map((s) => (
           <button key={s} className={`chip${value === s && !typing ? ' on' : ''}`} onClick={() => (setTyping(false), onChange(s))}>
             {s}

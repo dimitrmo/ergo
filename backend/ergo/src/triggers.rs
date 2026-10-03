@@ -49,7 +49,6 @@ pub struct Triggers {
     ha: Arc<Ha>,
     /// None when MQTT is off; MQTT triggers then don't load.
     mqtt: Option<Arc<Mqtt>>,
-    fallback_tz: Tz,
     by_entity: RwLock<HashMap<String, Vec<Arc<StateTrigger>>>>,
     mqtt_triggers: RwLock<Vec<Arc<MqttTrigger>>>,
     cron_tasks: Mutex<Vec<JoinHandle<()>>>,
@@ -92,14 +91,12 @@ impl Triggers {
         engine: Arc<Engine>,
         ha: Arc<Ha>,
         mqtt: Option<Arc<Mqtt>>,
-        fallback_tz: Tz,
     ) -> Arc<Self> {
         Arc::new(Self {
             db,
             engine,
             ha,
             mqtt,
-            fallback_tz,
             by_entity: RwLock::new(HashMap::new()),
             mqtt_triggers: RwLock::new(Vec::new()),
             cron_tasks: Mutex::new(Vec::new()),
@@ -108,10 +105,7 @@ impl Triggers {
 
     /// HA's configured zone once connected, else ERGO_TZ, else UTC.
     pub fn time_zone(&self) -> Tz {
-        self.ha
-            .time_zone()
-            .and_then(|z| z.parse().ok())
-            .unwrap_or(self.fallback_tz)
+        self.ha.tz()
     }
 
     pub fn reload(self: &Arc<Self>) -> Result<()> {

@@ -44,7 +44,7 @@ export const EditorContext = createContext<EditorContextValue>({
 export const useEditor = () => useContext(EditorContext)
 
 /** How exits read on the canvas: an If's true/false are yes/no. */
-export const PORT_LABEL: Record<string, string> = { true: 'yes', false: 'no' }
+export const PORT_LABEL: Record<string, string> = { true: 'yes', false: 'no', out: 'reached', timeout: 'timed out' }
 
 export const edgeId = (c: { source: string; sourceHandle?: string | null; target: string }) =>
   `${c.source}:${c.sourceHandle ?? 'out'}->${c.target}`

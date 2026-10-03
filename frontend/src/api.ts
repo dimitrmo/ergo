@@ -203,6 +203,20 @@ export interface HaActionInfo {
 /** domain -> action -> info, e.g. light -> turn_on. */
 export type HaActions = Record<string, Record<string, HaActionInfo>>
 
+/** A browser that turned on web push notifications. */
+export interface PushBrowser {
+  id: string
+  name: string
+  endpoint: string
+}
+
+export interface PushInfo {
+  /** ergo's VAPID public key, base64url. */
+  public_key: string
+  urgencies: string[]
+  subscriptions: PushBrowser[]
+}
+
 export interface MqttMessage {
   seq: number
   at: string
@@ -292,6 +306,11 @@ export const api = {
   mqttPublish: (msg: { topic: string; payload: string; qos: number; retain: boolean }) =>
     call<{ published: string }>('POST', 'api/mqtt/publish', msg),
   mqttWatch: (filter: string | null) => call<{ filter: string | null }>('POST', 'api/mqtt/watch', { filter }),
+  pushInfo: () => call<PushInfo>('GET', 'api/push'),
+  pushSubscribe: (name: string, subscription: PushSubscriptionJSON) =>
+    call<{ id: string }>('POST', 'api/push/subscriptions', { name, subscription }),
+  pushUnsubscribe: (id: string) => call<unknown>('DELETE', `api/push/subscriptions/${id}`),
+  pushTest: (id: string) => call<{ sent: string[] }>('POST', `api/push/subscriptions/${id}/test`),
   cronPreview: (cron: string) =>
     call<{ next: string[]; time_zone: string }>('POST', 'api/cron/preview', { cron }),
 }

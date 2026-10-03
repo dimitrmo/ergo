@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1.92"
+chrono = "0.4.45"
 croner = "4.0.0"
 ergo-core = { version = "0.0.10", path = "../ergo-core" }
 futures-util = "0.3.34"
@@ -21,6 +22,9 @@ tracing = "0.1.44"
 url = "2.5.8"
 uuid = { version = "1.26.1", features = ["v4"] }
 webpki-roots = "1.0.9"
+web-push-native = "0.5.0"
+base64ct = "1.8.3"
+http = "1.5.0"
 
 [dev-dependencies]
 wiremock = "0.6.5"

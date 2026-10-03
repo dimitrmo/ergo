@@ -82,18 +82,77 @@ const OP_WORDS: Record<string, string> = {
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
+/** An If or Filter rule: a value test, or (If only) the time, day or sun. */
+export type Rule = {
+  kind?: 'value' | 'time' | 'weekday' | 'sun'
+  field?: string
+  op?: string
+  value?: string
+  after?: string
+  before?: string
+  days?: number[]
+  sun?: string
+}
+
+const SUN_WORDS: Record<string, string> = {
+  after_sunset: 'after sunset',
+  before_sunrise: 'before sunrise',
+  down: 'the sun is down',
+  up: 'the sun is up',
+}
+
+/** [1..5] -> "on weekdays", [0, 6] -> "at weekends", else "on Mon, Wed". */
+export function describeDays(days: number[]): string {
+  const set = [...new Set(days)].sort()
+  if (set.join() === '1,2,3,4,5') return 'on weekdays'
+  if (set.join() === '0,6') return 'at weekends'
+  if (set.length === 7) return 'on any day'
+  return `on ${set.map((d) => DAYS[d]?.slice(0, 3)).join(', ')}`
+}
+
+function describeRule(r: Rule): string {
+  switch (r.kind) {
+    case 'time': {
+      const after = str(r.after)
+      const before = str(r.before)
+      if (after && before) return `between ${after} and ${before}`
+      return after ? `after ${after}` : before ? `before ${before}` : 'at a time'
+    }
+    case 'weekday':
+      return describeDays(r.days ?? [])
+    case 'sun':
+      return SUN_WORDS[r.sun ?? 'down'] ?? 'the sun'
+    default: {
+      const op = OP_WORDS[r.op ?? 'equals'] ?? r.op
+      const field = str(r.field).replace(/^\{\{\s*(.*?)\s*\}\}$/, '$1')
+      return `${field} ${op}${['exists', 'not_exists'].includes(r.op ?? '') ? '' : ` ${r.value ?? ''}`}`
+    }
+  }
+}
+
 /** "to is on (+1)", for If and Filter; "a condition holds" when unset. */
 function describeCondition(config: Record<string, unknown>): string {
   const short = (t: string) => (t.length > 44 ? `${t.slice(0, 44)}…` : t)
   if (config.mode === 'expression') return str(config.expression) ? short(str(config.expression)) : 'a condition holds'
   if (config.mode === 'jsonata') return str(config.jsonata) ? short(str(config.jsonata)) : 'a condition holds'
-  const rules = Array.isArray(config.rules) ? (config.rules as { field?: string; op?: string; value?: string }[]) : []
-  const r = rules.find((x) => str(x.field))
+  const rules = Array.isArray(config.rules) ? (config.rules as Rule[]) : []
+  const r = rules.find((x) => (x.kind && x.kind !== 'value') || str(x.field))
   if (!r) return 'a condition holds'
-  const op = OP_WORDS[r.op ?? 'equals'] ?? r.op
-  const field = str(r.field).replace(/^\{\{\s*(.*?)\s*\}\}$/, '$1')
   const more = rules.length > 1 ? ` (${config.match === 'any' ? 'or' : 'and'} ${rules.length - 1} more)` : ''
-  return `${field} ${op}${['exists', 'not_exists'].includes(r.op ?? '') ? '' : ` ${r.value ?? ''}`}${more}`
+  return `${describeRule(r)}${more}`
+}
+
+/** 5 + "minutes" -> "5 minutes", 1 + "hours" -> "1 hour". */
+export function describeDuration(amount: unknown, unit: unknown): string {
+  const n = typeof amount === 'number' ? String(amount) : str(amount)
+  const u = str(unit) || 'minutes'
+  return `${n || '?'} ${n === '1' ? u.replace(/s$/, '') : u}`
+}
+
+/** notify.mobile_app_pixel_7 -> "pixel 7", notify.persistent_notification -> "Home Assistant". */
+export function notifyTarget(service: string): string {
+  if (service === 'notify.persistent_notification' || service === 'persistent_notification') return 'Home Assistant'
+  return service.replace(/^notify\./, '').replace(/^mobile_app_/, '').replace(/_/g, ' ')
 }
 
 /** light.turn_on -> "Turn on", input_number.set_value -> "Set value of". */
@@ -138,6 +197,27 @@ export function describeNode(type: string, config: Record<string, unknown>, enti
     }
     case 'flow.if':
       return `If ${describeCondition(config)}`
+    case 'flow.delay':
+      return `Wait ${describeDuration(config.amount, config.unit)}`
+    case 'flow.wait': {
+      const id = str(config.entity_id)
+      if (!id) return 'Pick what to wait for'
+      const state = str(config.state)
+      return `Wait until ${entityName(id, entities)} is ${state || '…'}`
+    }
+    case 'push.send': {
+      const t = str(config.message)
+      const to = str(config.to) || 'all'
+      const who = to === 'all' ? 'all browsers' : 'one browser'
+      return t ? `Push to ${who}: “${t.length > 32 ? `${t.slice(0, 32)}…` : t}”` : `Push to ${who}`
+    }
+    case 'ha.notify': {
+      const service = str(config.service)
+      if (!service) return 'Choose who to notify'
+      const t = str(config.message)
+      const msg = t ? `: “${t.length > 32 ? `${t.slice(0, 32)}…` : t}”` : ''
+      return `Notify ${notifyTarget(service)}${msg}`
+    }
     case 'mqtt.publish': {
       const topic = str(config.topic)
       return topic ? `Send a message to ${topic}` : 'Choose where to send it'
@@ -214,8 +294,16 @@ export function nodeIcon(type: string): IconName {
       return 'inbox'
     case 'ha.action':
       return 'home'
+    case 'ha.notify':
+      return 'bell'
+    case 'push.send':
+      return 'browser'
     case 'flow.if':
       return 'branch'
+    case 'flow.delay':
+      return 'timer'
+    case 'flow.wait':
+      return 'hourglass'
     case 'mqtt.publish':
       return 'send'
     case 'http.download':

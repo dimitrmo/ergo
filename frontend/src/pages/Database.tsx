@@ -11,6 +11,7 @@ const ABOUT: Record<string, string> = {
   runs: 'Each time a workflow ran',
   run_nodes: 'What each step did in each run',
   meta: 'Internal settings',
+  push_subscriptions: 'Browsers that get web push notifications',
 }
 
 const PAGE_SIZES = [25, 50, 100]

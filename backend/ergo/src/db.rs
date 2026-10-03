@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use ergo_core::{Graph, NodeRecord, RunSink, RunStart, RunStatus};
+use ergo_nodes::{PushStore, PushSubscription};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::Serialize;
@@ -63,6 +64,15 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE run_nodes ADD COLUMN logs TEXT NOT NULL DEFAULT '[]';
     UPDATE run_nodes SET config = input, input = 'null';
     UPDATE run_nodes SET error = json_object('kind', 'other', 'message', error) WHERE error IS NOT NULL;",
+    // v3: browsers that turned on web push notifications.
+    "CREATE TABLE push_subscriptions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );",
 ];
 
 /// Activated versions kept per workflow, for rollback and run replay.
@@ -434,6 +444,50 @@ impl Db {
         Ok(Some((run, nodes)))
     }
 
+    pub fn push_subscriptions(&self) -> Result<Vec<PushSubscription>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, endpoint, p256dh, auth FROM push_subscriptions ORDER BY created_at",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(PushSubscription {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                endpoint: r.get(2)?,
+                p256dh: r.get(3)?,
+                auth: r.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Adds a browser, or renames it and refreshes its keys when its
+    /// endpoint is already known. Returns its id.
+    pub fn save_push_subscription(&self, sub: &PushSubscription) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.query_row(
+            "INSERT INTO push_subscriptions (id, name, endpoint, p256dh, auth, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (endpoint) DO UPDATE SET name = ?2, p256dh = ?4, auth = ?5
+             RETURNING id",
+            params![
+                sub.id,
+                sub.name,
+                sub.endpoint,
+                sub.p256dh,
+                sub.auth,
+                Utc::now().to_rfc3339()
+            ],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Returns whether it was there.
+    pub fn delete_push_subscription(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn.execute("DELETE FROM push_subscriptions WHERE id = ?1", [id])? > 0)
+    }
+
     /// Deletes runs past the retention window or count. Returns how many.
     pub fn prune_runs(&self, days: u32, max: u32) -> Result<usize> {
         let cutoff = (Utc::now() - Duration::days(days as i64)).to_rfc3339();
@@ -628,6 +682,18 @@ fn to_json(v: ValueRef) -> Value {
 
 fn ts(t: &DateTime<Utc>) -> String {
     t.to_rfc3339()
+}
+
+impl PushStore for Db {
+    fn subscriptions(&self) -> std::result::Result<Vec<PushSubscription>, String> {
+        self.push_subscriptions().map_err(|e| e.to_string())
+    }
+
+    fn forget(&self, id: &str) {
+        if let Err(e) = self.delete_push_subscription(id) {
+            error!(error = %e, "forgetting a push subscription");
+        }
+    }
 }
 
 impl RunSink for Db {

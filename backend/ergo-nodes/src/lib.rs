@@ -10,17 +10,21 @@ mod http;
 mod jsonata;
 mod mqtt;
 mod parse;
+mod push;
 mod text;
 
 #[cfg(test)]
 mod pipeline_tests;
 
 pub use data::{DataFilter, DataMap};
-pub use flow::FlowIf;
-pub use ha::{ActionCall, HaAction, HaCaller};
+pub use flow::{FlowDelay, FlowIf, FlowWait};
+pub use ha::{ActionCall, HaAction, HaCaller, HaNotify};
 pub use http::{HttpDownload, HttpRequest};
 pub use mqtt::{MqttTrigger, filter_covers, topic_matches, valid_topic_filter};
 pub use parse::{DataParse, JsonParser, Parser, XmlParser, parsers};
+pub use push::{
+    PushReport, PushSend, PushStore, PushSubscription, TITLE as PUSH_TITLE, URGENCIES, WebPush,
+};
 pub use text::TextCompose;
 
 use std::str::FromStr;
@@ -48,7 +52,11 @@ pub trait MqttPublisher: Send + Sync {
 
 /// Every node type. Without `mqtt` (MQTT turned off), the MQTT trigger and
 /// publish are left out and workflows that use them are told why.
-pub fn registry(mqtt: Option<Arc<dyn MqttPublisher>>, ha: Arc<dyn HaCaller>) -> Registry {
+pub fn registry(
+    mqtt: Option<Arc<dyn MqttPublisher>>,
+    ha: Arc<dyn HaCaller>,
+    push: Arc<WebPush>,
+) -> Registry {
     const MQTT_OFF: &str =
         "MQTT is off. Check the add-on's mqtt_url option; the Status page says why.";
     let mut r = Registry::default();
@@ -65,8 +73,12 @@ pub fn registry(mqtt: Option<Arc<dyn MqttPublisher>>, ha: Arc<dyn HaCaller>) -> 
             r.disable("mqtt.publish", MQTT_OFF);
         }
     }
-    r.register(HaAction::new(ha));
-    r.register(FlowIf);
+    r.register(HaAction::new(ha.clone()));
+    r.register(HaNotify::new(ha.clone()));
+    r.register(FlowIf::new(ha.clone()));
+    r.register(FlowDelay);
+    r.register(FlowWait::new(ha));
+    r.register(PushSend::new(push));
     r.register(TextCompose);
     r.register(HttpDownload::new());
     r.register(HttpRequest::new());

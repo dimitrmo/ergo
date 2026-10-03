@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { Icon } from '../components/Icon.tsx'
+import type { Rule } from '../describe.ts'
 import { FieldBlock, type InsertChip, MoreOptions, TemplateText } from './fields.tsx'
 
 type Cfg = Record<string, unknown>
@@ -296,7 +297,78 @@ const OPS: [string, string][] = [
   ['not_exists', 'is not set'],
 ]
 
-type Rule = { field: string; op: string; value: string }
+type RuleKind = NonNullable<Rule['kind']>
+
+const KINDS: [RuleKind, string][] = [
+  ['value', 'A value'],
+  ['time', 'The time'],
+  ['weekday', 'The day'],
+  ['sun', 'The sun'],
+]
+
+/** A fresh rule of each kind, with sensible starting values. */
+const NEW_RULE: Record<RuleKind, Rule> = {
+  value: { field: '', op: 'equals', value: '' },
+  time: { kind: 'time', after: '22:00', before: '07:00' },
+  weekday: { kind: 'weekday', days: [1, 2, 3, 4, 5] },
+  sun: { kind: 'sun', sun: 'after_sunset' },
+}
+
+// Monday first, as people read a week; stored as 0 = Sunday.
+const WEEK: [number, string][] = [
+  [1, 'Mon'],
+  [2, 'Tue'],
+  [3, 'Wed'],
+  [4, 'Thu'],
+  [5, 'Fri'],
+  [6, 'Sat'],
+  [0, 'Sun'],
+]
+
+const SUN: [string, string][] = [
+  ['after_sunset', 'After sunset'],
+  ['before_sunrise', 'Before sunrise'],
+  ['down', 'Sun is down'],
+  ['up', 'Sun is up'],
+]
+
+/** The time, day or sun part of an If rule. */
+function HomeRuleBody({ rule, update }: { rule: Rule; update: (r: Partial<Rule>) => void }) {
+  if (rule.kind === 'time')
+    return (
+      <div className="rule-body">
+        <span className="quiet">after</span>
+        <input className="input" type="time" value={rule.after ?? ''} onChange={(e) => update({ after: e.target.value })} />
+        <span className="quiet">and before</span>
+        <input className="input" type="time" value={rule.before ?? ''} onChange={(e) => update({ before: e.target.value })} />
+      </div>
+    )
+  if (rule.kind === 'weekday') {
+    const days = rule.days ?? []
+    return (
+      <div className="rule-body chips">
+        {WEEK.map(([d, label]) => (
+          <button
+            key={d}
+            className={`chip small${days.includes(d) ? ' on' : ''}`}
+            onClick={() => update({ days: days.includes(d) ? days.filter((x) => x !== d) : [...days, d] })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="rule-body chips">
+      {SUN.map(([v, label]) => (
+        <button key={v} className={`chip small${(rule.sun ?? 'down') === v ? ' on' : ''}`} onClick={() => update({ sun: v })}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /** Rules (field, operator, value) with all/any, as Filter and If use them. */
 function RulesEditor({
@@ -305,41 +377,70 @@ function RulesEditor({
   fieldPlaceholder,
   valuePlaceholder,
   help,
+  homeRules = false,
 }: {
   cfg: Cfg
   set: Set
   fieldPlaceholder: string
   valuePlaceholder: string
   help: ReactNode
+  /** Offer time, day and sun rules too (If only). */
+  homeRules?: boolean
 }) {
   const rules = list<Rule>(cfg.rules)
   const setRule = (i: number, r: Partial<Rule>) => set('rules', rules.map((x, j) => (j === i ? { ...x, ...r } : x)))
+  const remove = (i: number) => (
+    <button className="btn ghost icon" aria-label="Remove rule" onClick={() => set('rules', rules.filter((_, j) => j !== i))}>
+      <Icon name="x" size={16} />
+    </button>
+  )
+  const kindPicker = (i: number, r: Rule) => (
+    <select
+      className="select"
+      aria-label="What to check"
+      value={r.kind ?? 'value'}
+      onChange={(e) => set('rules', rules.map((x, j) => (j === i ? NEW_RULE[e.target.value as RuleKind] : x)))}
+    >
+      {KINDS.map(([v, l]) => (
+        <option key={v} value={v}>
+          {l}
+        </option>
+      ))}
+    </select>
+  )
   return (
     <>
       {rules.length > 1 && (
         <Chips options={[['all', 'All rules match'], ['any', 'Any rule matches']]} value={str(cfg.match) || 'all'} onChange={(v) => set('match', v)} />
       )}
       <div className="rules">
-        {rules.map((r, i) => (
-          <div key={i} className="rule">
-            <input className="input mono" value={r.field} placeholder={fieldPlaceholder} spellCheck={false} onChange={(e) => setRule(i, { field: e.target.value })} />
-            <select className="select" value={r.op || 'equals'} onChange={(e) => setRule(i, { op: e.target.value })}>
-              {OPS.map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-            {!['exists', 'not_exists'].includes(r.op) ? (
-              <input className="input mono" value={r.value} placeholder={valuePlaceholder} spellCheck={false} onChange={(e) => setRule(i, { value: e.target.value })} />
-            ) : (
-              <span />
-            )}
-            <button className="btn ghost icon" aria-label="Remove rule" onClick={() => set('rules', rules.filter((_, j) => j !== i))}>
-              <Icon name="x" size={16} />
-            </button>
-          </div>
-        ))}
+        {rules.map((r, i) =>
+          homeRules && r.kind && r.kind !== 'value' ? (
+            <div key={i} className="home-rule">
+              {kindPicker(i, r)}
+              <HomeRuleBody rule={r} update={(p) => setRule(i, p)} />
+              {remove(i)}
+            </div>
+          ) : (
+            <div key={i} className={`rule${homeRules ? ' with-kind' : ''}`}>
+              {homeRules && kindPicker(i, r)}
+              <input className="input mono" value={r.field ?? ''} placeholder={fieldPlaceholder} spellCheck={false} onChange={(e) => setRule(i, { field: e.target.value })} />
+              <select className="select" value={r.op || 'equals'} onChange={(e) => setRule(i, { op: e.target.value })}>
+                {OPS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              {!['exists', 'not_exists'].includes(r.op ?? '') ? (
+                <input className="input mono" value={r.value ?? ''} placeholder={valuePlaceholder} spellCheck={false} onChange={(e) => setRule(i, { value: e.target.value })} />
+              ) : (
+                <span />
+              )}
+              {remove(i)}
+            </div>
+          ),
+        )}
         <button className="btn ghost small add-row" onClick={() => set('rules', [...rules, { field: '', op: 'equals', value: '' }])}>
           <Icon name="plus" size={14} /> Add rule
         </button>
@@ -371,11 +472,12 @@ export function IfForm({ cfg, set, chips }: { cfg: Cfg; set: Set; chips: InsertC
           set={set}
           fieldPlaceholder="to"
           valuePlaceholder="on"
+          homeRules
           help={
             <>
-              Fields are keys of this step's input, like <code>to</code> or <code>to_state.attributes.temperature</code>, or a
-              template such as <code>{'{{ trigger.time }}'}</code> for anything else. Text matches ignore case; numbers compare
-              as numbers.
+              A value rule checks a key of this step's input, like <code>to</code> or <code>to_state.attributes.temperature</code>,
+              or a template such as <code>{'{{ trigger.to }}'}</code>. Text matches ignore case; numbers compare as numbers. The
+              time, day and sun follow Home Assistant's time zone and its Sun integration.
             </>
           }
         />

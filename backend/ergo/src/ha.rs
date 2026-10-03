@@ -12,7 +12,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
+use chrono_tz::Tz;
 use ergo_nodes::{ActionCall, HaCaller};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -73,6 +74,8 @@ pub struct Ha {
     in_flight: AtomicUsize,
     /// The action catalog (`get_services`), fetched once per connection.
     services: RwLock<Option<Value>>,
+    /// The time zone to use until HA says its own (ERGO_TZ, else UTC).
+    fallback_tz: Tz,
 }
 
 /// `http://supervisor/core` becomes `ws://supervisor/core/websocket`;
@@ -100,6 +103,7 @@ impl Ha {
     pub fn new(
         ha_url: &str,
         token: Option<String>,
+        fallback_tz: Tz,
     ) -> Result<(Arc<Self>, mpsc::Receiver<Command>)> {
         let (events, _) = broadcast::channel(1024);
         let (commands, rx) = mpsc::channel(64);
@@ -114,6 +118,7 @@ impl Ha {
                 calls: Mutex::new(VecDeque::new()),
                 in_flight: AtomicUsize::new(0),
                 services: RwLock::new(None),
+                fallback_tz,
             }),
             rx,
         ))
@@ -129,6 +134,13 @@ impl Ha {
 
     pub fn time_zone(&self) -> Option<String> {
         self.status.read().unwrap().time_zone.clone()
+    }
+
+    /// HA's configured zone once connected, else the fallback.
+    pub fn tz(&self) -> Tz {
+        self.time_zone()
+            .and_then(|z| z.parse().ok())
+            .unwrap_or(self.fallback_tz)
     }
 
     pub fn state(&self, entity_id: &str) -> Option<Value> {
@@ -404,6 +416,14 @@ impl HaCaller for Ha {
         }
         self.in_flight.fetch_sub(1, Ordering::AcqRel);
         result
+    }
+
+    fn state(&self, entity_id: &str) -> Option<Value> {
+        Ha::state(self, entity_id)
+    }
+
+    fn local_now(&self) -> DateTime<FixedOffset> {
+        Utc::now().with_timezone(&self.tz()).fixed_offset()
     }
 }
 

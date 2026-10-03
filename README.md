@@ -38,12 +38,16 @@ Every workflow starts with **one trigger** and then runs as many **steps** as yo
 | 📡 **MQTT message** | when a message arrives, like a smart button press | *When the bedside button is double-pressed…* |
 | 👆 **Manual** | only when you press **Try it** | *Whenever I want to run "movie night"…* |
 
-### 9 kinds of steps
+### 13 kinds of steps
 
 | Step | What it does |
 | --- | --- |
-| 🏠 **HA action** | Turns on a light, sets a thermostat, notifies your phone: any Home Assistant action |
-| 🔀 **If** | Goes one way when something is true and another way when it isn't |
+| 🏠 **HA action** | Turns on a light, sets a thermostat, locks a door: any Home Assistant action |
+| 🔔 **Notify** | Sends a notification to your phone through the Home Assistant app, with a title and a message |
+| 💻 **Web push** | Pops up a notification titled *Ergo* in your browser, on any computer or phone that turned them on; choose how urgent it is |
+| 🔀 **If** | Goes one way when something is true and another way when it isn't: a value, the time, the day of the week, or the sun |
+| ⏱️ **Delay** | Waits a few seconds, minutes or hours before the next step |
+| ⏳ **Wait until** | Waits for something to happen, like a door closing, and takes another path if it doesn't happen in time |
 | 📤 **MQTT publish** | Sends a message to your smart gadgets |
 | 🌐 **Web request** | Calls a web service or webhook, such as IFTTT or a Discord bot |
 | ⬇️ **Download** | Fetches a feed, file or web page |
@@ -78,6 +82,13 @@ Every workflow starts with **one trigger** and then runs as many **steps** as yo
   notifications. Anything Home Assistant can do, Ergo can do.
 - **Make decisions:** *if* it's raining, close the blinds; *otherwise* open them. Each choice
   can lead to its own steps.
+- **Only at the right time:** *after sunset*, *before sunrise*, *between 22:00 and 07:00*, or
+  *on weekdays*. Just pick it; no formulas.
+- **Take your time:** turn the hallway light off *5 minutes later*, or *wait until* the garage
+  door closes and tell you if it doesn't.
+- **Get notified:** pick your phone, write a title and a message, done.
+- **Notifications in your browser too:** press *Turn on here* on any computer, and Ergo can
+  pop up notifications there, no app needed. Urgent ones stay on screen until you dismiss them.
 - **Reach beyond your home:** fetch the weather, a news feed, or any web service, and use
   what comes back.
 - **Write your own messages:** build notifications from live information, like *"The garage
@@ -119,6 +130,16 @@ Every workflow starts with **one trigger** and then runs as many **steps** as yo
 | ![A workflow on the canvas](docs/screenshots/editor.png) **See the whole thing at a glance.** Each step reads like a sentence. | ![Yes and no branches](docs/screenshots/if-branches.png) **Make decisions.** Go one way or the other with **If**. |
 | ![Name a new workflow](docs/screenshots/new-workflow.png) **Start fresh in seconds.** Give it a name and go. | ![Workflow list](docs/screenshots/workflows.png) **All your workflows in one place.** Switch them on and off with a tap. |
 
+### Delays, waiting, notifications and good timing
+
+| | |
+| --- | --- |
+| ![Garage left open](docs/screenshots/garage.png) **Garage left open.** Wait until it closes; if it doesn't, and it's night, send a notification. | ![Hallway night light](docs/screenshots/night-light.png) **Hallway night light.** If the sun is down, turn the light on, wait 5 minutes, turn it off. |
+| ![Wait until](docs/screenshots/wait-until.png) **Wait until** something reaches a state, and choose when to give up. | ![Delay](docs/screenshots/delay.png) **Delay** for seconds, minutes or hours. |
+| ![Time window](docs/screenshots/if-time.png) **Only between certain times,** even across midnight. | ![After sunset](docs/screenshots/if-sun.png) **After sunset or before sunrise,** using your home's own sun times. |
+| ![Notify](docs/screenshots/notify.png) **Notify** a phone or Home Assistant with a title and a message. | ![Web push](docs/screenshots/web-push.png) **Web push** to every browser that turned notifications on, with an urgency. |
+| ![All steps](docs/screenshots/step-chooser.png) **Thirteen kinds of steps,** each explained in a sentence. | |
+
 ### Setting up each step
 
 | | |
@@ -152,6 +173,10 @@ Every workflow starts with **one trigger** and then runs as many **steps** as yo
 
 Have smart buttons or gadgets that use MQTT? Install the **Mosquitto broker** add-on too, and
 Ergo will find it automatically.
+
+Want notifications in your browser? They need Home Assistant to be opened over **HTTPS** (for
+example through Home Assistant Cloud or your own certificate), because browsers only allow them
+on secure pages.
 
 Need help? See the [add-on guide](addon/DOCS.md).
 

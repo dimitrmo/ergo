@@ -2,9 +2,10 @@ import { useState } from 'react'
 import type { Entity, NodeSchema, RunNode } from '../api.ts'
 import { Icon } from '../components/Icon.tsx'
 import { nodeIcon } from '../describe.ts'
-import { EntityPicker, FieldBlock, FieldInput, type InsertChip, MoreOptions, SchedulePicker, StateChips, TemplateText } from './fields.tsx'
+import { DurationField, EntityPicker, FieldBlock, FieldInput, type InsertChip, MoreOptions, SchedulePicker, StateChips, TemplateText } from './fields.tsx'
 import { ComposeForm, DownloadForm, FilterForm, IfForm, MapForm, ParseForm, RequestForm } from './dataForms.tsx'
-import { ActionForm, MqttTriggerForm } from './haForms.tsx'
+import { ActionForm, MqttTriggerForm, NotifyForm } from './haForms.tsx'
+import { PushForm } from './pushForm.tsx'
 import { JsonTree } from './JsonTree.tsx'
 import { type ErgoNode, PORT_LABEL, useEditor } from './model.ts'
 
@@ -150,6 +151,40 @@ function Form({ node, onChange, upstream }: { node: ErgoNode; onChange: (p: Patc
       return <ActionForm cfg={cfg} set={set} setMany={setMany} entities={entities} chips={insertChips(upstream)} />
     case 'flow.if':
       return <IfForm cfg={cfg} set={set} chips={insertChips(upstream)} />
+    case 'flow.delay':
+      return (
+        <>
+          <FieldBlock label="Wait for" help="Up to 24 hours. The next step gets the same data this one got.">
+            <DurationField amount={cfg.amount} unit={cfg.unit} onAmount={(v) => set('amount', v)} onUnit={(v) => set('unit', v)} />
+          </FieldBlock>
+          <p className="help">While it waits, this workflow won't start again; a restart of ergo ends the wait.</p>
+        </>
+      )
+    case 'flow.wait': {
+      const entity = entities.find((e: Entity) => e.entity_id === s('entity_id'))
+      return (
+        <>
+          <FieldBlock label="Wait until">
+            <EntityPicker value={s('entity_id')} onChange={(v) => set('entity_id', v)} entities={entities} />
+          </FieldBlock>
+          {s('entity_id') && (
+            <FieldBlock label="Is">
+              <StateChips value={s('state')} onChange={(v) => set('state', v)} entity={entity} />
+            </FieldBlock>
+          )}
+          <FieldBlock label="Give up after" help="Up to 24 hours. Then the run continues from “timed out” instead.">
+            <DurationField amount={cfg.timeout} unit={cfg.unit} onAmount={(v) => set('timeout', v)} onUnit={(v) => set('unit', v)} />
+          </FieldBlock>
+          <p className="help">
+            If it's already in that state, the run goes straight on. Either way the next step gets the same data this one got.
+          </p>
+        </>
+      )
+    }
+    case 'ha.notify':
+      return <NotifyForm cfg={cfg} set={set} chips={insertChips(upstream)} />
+    case 'push.send':
+      return <PushForm cfg={cfg} set={set} chips={insertChips(upstream)} />
     case 'http.request':
       return <RequestForm cfg={cfg} set={set} chips={insertChips(upstream)} />
     case 'http.download':

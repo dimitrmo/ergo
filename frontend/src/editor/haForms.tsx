@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type Entity, type HaActionInfo, type HaActions } from '../api.ts'
 import { Icon } from '../components/Icon.tsx'
-import { actionWords, entityName } from '../describe.ts'
+import { actionWords, entityName, notifyTarget } from '../describe.ts'
 import { EntityPicker, FieldBlock, type InsertChip, MoreOptions, TemplateText } from './fields.tsx'
 
 type Cfg = Record<string, unknown>
@@ -286,6 +286,57 @@ export function MqttTriggerForm({ cfg, set, nickname }: { cfg: Cfg; set: Set; ni
         <code>{'{{ input.json }}'}</code>.
       </p>
       <MoreOptions>{nickname}</MoreOptions>
+    </>
+  )
+}
+
+/** Who a notify action reaches, in words: phones by name, the HA sidebar, others as named. */
+function notifyLabel(service: string): string {
+  if (service === 'persistent_notification') return 'Home Assistant’s notifications'
+  if (service.startsWith('mobile_app_')) return `Phone: ${notifyTarget(service)}`
+  return notifyTarget(service)
+}
+
+/** Notify: pick a phone or notifier, then a title and a message. */
+export function NotifyForm({ cfg, set, chips }: { cfg: Cfg; set: Set; chips: InsertChip[] }) {
+  const { actions, error } = useHaActions()
+  const service = str(cfg.service)
+  // send_message needs a notify entity; the classic per-device actions don't.
+  const services = Object.keys(actions?.notify ?? {})
+    .filter((s) => s !== 'send_message')
+    .sort((a, b) => Number(b.startsWith('mobile_app_')) - Number(a.startsWith('mobile_app_')) || a.localeCompare(b))
+  return (
+    <>
+      <FieldBlock label="Send to">
+        {actions ? (
+          services.length ? (
+            <div className="chips">
+              {services.map((s) => (
+                <button key={s} className={`chip${service === `notify.${s}` ? ' on' : ''}`} onClick={() => set('service', `notify.${s}`)}>
+                  {notifyLabel(s)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="quiet">Home Assistant has no notifiers yet. Install the Companion app on your phone to get one.</p>
+          )
+        ) : error ? (
+          <div className="issue warning">Couldn't load Home Assistant's notifiers: {error}</div>
+        ) : (
+          <p className="quiet">Loading Home Assistant's notifiers…</p>
+        )}
+      </FieldBlock>
+      <FieldBlock label="Title" help="Optional.">
+        <TemplateText value={str(cfg.title)} onChange={(v) => set('title', v)} placeholder="Garage" chips={chips} />
+      </FieldBlock>
+      <FieldBlock label="Message">
+        <TemplateText multiline value={str(cfg.message)} onChange={(v) => set('message', v)} placeholder="The garage door is still open" chips={chips} />
+      </FieldBlock>
+      <MoreOptions>
+        <FieldBlock label="Notify action as text" help="Any notify action, e.g. notify.family or a template.">
+          <input className="input mono" value={service} placeholder="notify.mobile_app_my_phone" spellCheck={false} onChange={(e) => set('service', e.target.value)} />
+        </FieldBlock>
+      </MoreOptions>
     </>
   )
 }

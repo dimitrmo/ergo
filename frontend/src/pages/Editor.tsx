@@ -484,7 +484,7 @@ function EditorInner({ id }: { id: string }) {
   // The selected step's input comes from the steps connected into it.
   const upstream = useMemo(() => {
     if (!selected) return []
-    // An If passes its input on, so look through it to the steps before it.
+    // If, Delay and Wait until pass their input on, so look through them to the steps before.
     const found: NodeSchema[] = []
     const seen = new Set<string>()
     const visit = (id: string) => {
@@ -493,7 +493,7 @@ function EditorInner({ id }: { id: string }) {
         seen.add(e.source)
         const n = nodes.find((x) => x.id === e.source)
         const schema = n && schemas.get(n.data.nodeType)
-        if (schema?.type === 'flow.if') visit(e.source)
+        if (schema?.kind === 'flow') visit(e.source)
         else if (schema) found.push(schema)
       }
     }

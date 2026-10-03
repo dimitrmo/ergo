@@ -8,9 +8,10 @@ mod triggers;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use ergo_core::{Engine, Graph, has_errors, validate};
+use ergo_nodes::{PushStore, PushSubscription, WebPush};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing::{error, info, warn};
@@ -63,6 +64,35 @@ async fn main() -> Result<()> {
     }
 }
 
+/// For `check`: step types only, no browsers to push to.
+struct NoSubscriptions;
+
+impl PushStore for NoSubscriptions {
+    fn subscriptions(&self) -> std::result::Result<Vec<PushSubscription>, String> {
+        Ok(vec![])
+    }
+    fn forget(&self, _: &str) {}
+}
+
+/// ergo's private VAPID key, made on first start. It lives in its own file
+/// (readable by ergo only) rather than the database, so the Database page
+/// never shows it; HA backups still include it.
+fn push_key(data_dir: &std::path::Path) -> Result<Vec<u8>> {
+    let path = data_dir.join("push.key");
+    if let Ok(key) = std::fs::read(&path) {
+        return Ok(key);
+    }
+    let key = WebPush::generate_key();
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+    std::io::Write::write_all(&mut opts.open(&path)?, &key)
+        .with_context(|| format!("writing {}", path.display()))?;
+    info!("made a new web push key");
+    Ok(key)
+}
+
 /// Validates a workflow graph file; exits non-zero on errors (useful in CI).
 fn check(file: &std::path::Path) -> Result<()> {
     let text =
@@ -70,8 +100,10 @@ fn check(file: &std::path::Path) -> Result<()> {
     let graph: Graph = serde_json::from_str(&text).context("parsing workflow JSON")?;
     // Checks every step type, MQTT included, whatever this install's options.
     // An HA client that never connects: only the step types are needed.
-    let (ha, _) = Ha::new("http://localhost:8123", None)?;
-    let registry = ergo_nodes::registry(Some(Mqtt::disabled(None)), ha);
+    let (ha, _) = Ha::new("http://localhost:8123", None, chrono_tz::UTC)?;
+    let push = WebPush::new(&WebPush::generate_key(), Arc::new(NoSubscriptions))
+        .map_err(|e| anyhow!(e))?;
+    let registry = ergo_nodes::registry(Some(Mqtt::disabled(None)), ha, Arc::new(push));
     let issues = validate(&graph, &registry);
     for issue in &issues {
         println!(
@@ -143,31 +175,31 @@ async fn serve(cfg: Config) -> Result<()> {
         );
     }
 
-    let (ha, ha_commands) = Ha::new(&cfg.ha_url, cfg.ha_token.clone())?;
-    tokio::spawn(ha.clone().run(ha_commands));
-
-    let (mqtt, mqtt_error) = connect_mqtt(&cfg).await;
-    let registry = Arc::new(ergo_nodes::registry(
-        mqtt.clone()
-            .map(|m| m as Arc<dyn ergo_nodes::MqttPublisher>),
-        ha.clone(),
-    ));
-    // Large downloads go to <data>/tmp; each run's files are deleted when it ends.
-    let engine = Engine::new(registry, db.clone(), cfg.max_concurrent_runs, NODE_TIMEOUT)
-        .with_temp_dir(cfg.data_dir.join("tmp"));
-
+    // HA's own time zone wins once connected; until then ERGO_TZ, else UTC.
     let fallback_tz = cfg
         .tz
         .as_deref()
         .and_then(|z| z.parse().ok())
         .unwrap_or(chrono_tz::UTC);
-    let triggers = Triggers::new(
-        db.clone(),
-        engine.clone(),
-        ha.clone(),
-        mqtt.clone(),
-        fallback_tz,
+    let (ha, ha_commands) = Ha::new(&cfg.ha_url, cfg.ha_token.clone(), fallback_tz)?;
+    tokio::spawn(ha.clone().run(ha_commands));
+
+    let (mqtt, mqtt_error) = connect_mqtt(&cfg).await;
+    let push = Arc::new(
+        WebPush::new(&push_key(&cfg.data_dir)?, db.clone())
+            .map_err(|e| anyhow!("web push key: {e}"))?,
     );
+    let registry = Arc::new(ergo_nodes::registry(
+        mqtt.clone()
+            .map(|m| m as Arc<dyn ergo_nodes::MqttPublisher>),
+        ha.clone(),
+        push.clone(),
+    ));
+    // Large downloads go to <data>/tmp; each run's files are deleted when it ends.
+    let engine = Engine::new(registry, db.clone(), cfg.max_concurrent_runs, NODE_TIMEOUT)
+        .with_temp_dir(cfg.data_dir.join("tmp"));
+
+    let triggers = Triggers::new(db.clone(), engine.clone(), ha.clone(), mqtt.clone());
     triggers.reload()?;
     tokio::spawn(triggers.clone().dispatch_state_changes());
     tokio::spawn(triggers.clone().dispatch_mqtt_messages());
@@ -193,6 +225,7 @@ async fn serve(cfg: Config) -> Result<()> {
         mqtt,
         mqtt_error,
         triggers,
+        push,
         started: Instant::now(),
         retention: (days, max),
     });

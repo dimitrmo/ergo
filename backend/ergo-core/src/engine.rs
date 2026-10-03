@@ -295,18 +295,16 @@ impl Engine {
                 .with_run(&run.id, self.temp_dir.as_deref())
                 .with_workflow(&run.workflow_id);
             let result = match &config {
-                Ok(cfg) => match tokio::time::timeout(
-                    self.node_timeout,
-                    exec.run(cfg, &branch.input, &ctx),
-                )
-                .await
-                {
-                    Ok(r) => r,
-                    Err(_) => Err(NodeError::new(
-                        ErrorKind::Timeout,
-                        format!("timed out after {} s", self.node_timeout.as_secs()),
-                    )),
-                },
+                Ok(cfg) => {
+                    let limit = exec.time_limit(cfg).unwrap_or(self.node_timeout);
+                    match tokio::time::timeout(limit, exec.run(cfg, &branch.input, &ctx)).await {
+                        Ok(r) => r,
+                        Err(_) => Err(NodeError::new(
+                            ErrorKind::Timeout,
+                            format!("timed out after {} s", limit.as_secs()),
+                        )),
+                    }
+                }
                 Err(e) => Err(e.clone()),
             };
             let duration_ms = clock.elapsed().as_millis() as u64;

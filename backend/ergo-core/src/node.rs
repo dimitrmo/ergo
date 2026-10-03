@@ -297,6 +297,12 @@ pub trait NodeExecutor: Send + Sync {
         Vec::new()
     }
 
+    /// How long a run of this node may take, when it isn't the engine's
+    /// usual step timeout (e.g. a delay that waits for minutes on purpose).
+    fn time_limit(&self, _config: &Value) -> Option<std::time::Duration> {
+        None
+    }
+
     /// Runs the node on `input` (the previous step's output). `config` has
     /// its templates already rendered.
     async fn run(

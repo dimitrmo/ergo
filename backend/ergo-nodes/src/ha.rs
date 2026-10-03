@@ -1,8 +1,10 @@
 //! `ha.action`: calls a Home Assistant action (a service), e.g. `light.turn_on`.
+//! `ha.notify`: sends a notification through a `notify.*` action.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::{DateTime, FixedOffset};
 use ergo_core::{
     ErrorKind, Field, FieldType, NodeError, NodeExecutor, NodeKind, NodeOutput, NodeSchema, RunCtx,
 };
@@ -24,11 +26,19 @@ pub struct ActionCall {
     pub workflow_id: String,
 }
 
-/// Calls HA actions; implemented by the binary's WebSocket connection.
+/// Calls HA actions and reads its state; implemented by the binary's
+/// WebSocket connection.
 #[async_trait]
 pub trait HaCaller: Send + Sync {
     /// Returns HA's result: `{ "context": …, "response": … }`.
     async fn call_action(&self, call: ActionCall) -> Result<Value, String>;
+
+    /// An entity's current state object (`state`, `attributes`, …), if HA
+    /// has it.
+    fn state(&self, entity_id: &str) -> Option<Value>;
+
+    /// The time now in Home Assistant's time zone.
+    fn local_now(&self) -> DateTime<FixedOffset>;
 }
 
 pub struct HaAction {
@@ -192,13 +202,129 @@ impl NodeExecutor for HaAction {
     }
 }
 
+pub struct HaNotify {
+    ha: Arc<dyn HaCaller>,
+}
+
+impl HaNotify {
+    pub fn new(ha: Arc<dyn HaCaller>) -> Self {
+        Self { ha }
+    }
+}
+
+/// `notify.mobile_app_pixel` -> "mobile_app_pixel"; anything else is refused.
+fn notify_service(action: &str) -> Option<&str> {
+    match split_action(action)? {
+        ("notify", service) => Some(service),
+        _ => None,
+    }
+}
+
+#[async_trait]
+impl NodeExecutor for HaNotify {
+    fn schema(&self) -> NodeSchema {
+        NodeSchema::new("ha.notify", NodeKind::Action, "Notify")
+            .description("Sends a notification to a phone or another notifier.")
+            .field(
+                Field::new("service", "Send to", FieldType::Text)
+                    .required()
+                    .placeholder("notify.mobile_app_my_phone")
+                    .help("A notify action, as in Developer tools → Actions."),
+            )
+            .field(Field::new("title", "Title", FieldType::Template).placeholder("Garage"))
+            .field(
+                Field::new("message", "Message", FieldType::Template)
+                    .required()
+                    .placeholder("The garage door is still open"),
+            )
+            .output(object(json!({
+                "service": string("The notify action that was called"),
+                "title": string("The title that was sent"),
+                "message": string("The message that was sent"),
+            })))
+    }
+
+    fn validate(&self, config: &Value) -> Vec<String> {
+        match config["service"].as_str().map(str::trim) {
+            Some(a) if !a.is_empty() && !a.contains("{{") && notify_service(a).is_none() => {
+                vec![format!(
+                    "`{a}` isn't a notify action; pick one like notify.mobile_app_my_phone"
+                )]
+            }
+            _ => vec![],
+        }
+    }
+
+    async fn run(&self, cfg: &Value, _: &Value, ctx: &RunCtx<'_>) -> Result<NodeOutput, NodeError> {
+        let action = cfg["service"].as_str().unwrap_or_default().trim();
+        let service = notify_service(action).ok_or_else(|| {
+            NodeError::new(
+                ErrorKind::Config,
+                format!("`{action}` isn't a notify action"),
+            )
+        })?;
+        let text = |key: &str| match &cfg[key] {
+            Value::Null => String::new(),
+            Value::String(s) => s.trim().to_string(),
+            other => other.to_string(),
+        };
+        let (title, message) = (text("title"), text("message"));
+        if message.is_empty() {
+            return Err(NodeError::new(ErrorKind::Config, "the message is empty"));
+        }
+        let mut data = json!({ "message": message });
+        if !title.is_empty() {
+            data["title"] = json!(title);
+        }
+        self.ha
+            .call_action(ActionCall {
+                domain: "notify".into(),
+                service: service.into(),
+                entity_ids: vec![],
+                data: data.clone(),
+                return_response: false,
+                workflow_id: ctx.workflow_id.to_string(),
+            })
+            .await
+            .map_err(|e| {
+                NodeError::new(ErrorKind::Ha, e).details(json!({ "action": action, "data": data }))
+            })?;
+        ctx.log(format!("sent a notification with {action}"));
+        Ok(NodeOutput::out(json!({
+            "service": action,
+            "title": title,
+            "message": message,
+        })))
+    }
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::sync::Mutex;
 
+    /// Records action calls; states and the clock are set by each test.
     #[derive(Default)]
-    pub(crate) struct FakeHa(pub Mutex<Vec<ActionCall>>);
+    pub(crate) struct FakeHa {
+        pub calls: Mutex<Vec<ActionCall>>,
+        pub states: Mutex<HashMap<String, Value>>,
+        pub now: Mutex<Option<DateTime<FixedOffset>>>,
+    }
+
+    impl FakeHa {
+        pub fn set_state(&self, entity_id: &str, state: &str) {
+            self.states.lock().unwrap().insert(
+                entity_id.into(),
+                json!({ "entity_id": entity_id, "state": state }),
+            );
+        }
+
+        /// Sets the clock, e.g. "2026-10-05T22:30:00+03:00" (a Monday).
+        pub fn set_now(&self, rfc3339: &str) {
+            *self.now.lock().unwrap() = Some(DateTime::parse_from_rfc3339(rfc3339).unwrap());
+        }
+    }
 
     #[async_trait]
     impl HaCaller for FakeHa {
@@ -208,9 +334,71 @@ mod tests {
             } else {
                 Value::Null
             };
-            self.0.lock().unwrap().push(call);
+            self.calls.lock().unwrap().push(call);
             Ok(json!({ "context": { "id": "c1" }, "response": answer }))
         }
+
+        fn state(&self, entity_id: &str) -> Option<Value> {
+            self.states.lock().unwrap().get(entity_id).cloned()
+        }
+
+        fn local_now(&self) -> DateTime<FixedOffset> {
+            self.now
+                .lock()
+                .unwrap()
+                .unwrap_or_else(|| chrono::Utc::now().fixed_offset())
+        }
+    }
+
+    #[tokio::test]
+    async fn notify_sends_title_and_message() {
+        let fake = Arc::new(FakeHa::default());
+        let node = HaNotify::new(fake.clone());
+        let cfg = json!({ "service": "notify.mobile_app_pixel", "title": "Garage", "message": "Still open" });
+        let (t, s) = (json!({}), json!({}));
+        let ctx = RunCtx::new(&t, &s).with_workflow("wf1");
+        let out = node.run(&cfg, &json!({}), &ctx).await.unwrap();
+        assert_eq!(out.output["message"], "Still open");
+        let call = fake.calls.lock().unwrap()[0].clone();
+        assert_eq!(
+            (call.domain.as_str(), call.service.as_str()),
+            ("notify", "mobile_app_pixel")
+        );
+        assert_eq!(
+            call.data,
+            json!({ "title": "Garage", "message": "Still open" })
+        );
+        // No title: only the message is sent.
+        let cfg = json!({ "service": "notify.notify", "message": "Hi" });
+        node.run(&cfg, &json!({}), &ctx).await.unwrap();
+        assert_eq!(
+            fake.calls.lock().unwrap()[1].data,
+            json!({ "message": "Hi" })
+        );
+    }
+
+    #[tokio::test]
+    async fn notify_refuses_other_actions_and_empty_messages() {
+        let node = HaNotify::new(Arc::new(FakeHa::default()));
+        assert_eq!(
+            node.validate(&json!({ "service": "light.turn_on" })).len(),
+            1
+        );
+        assert!(
+            node.validate(&json!({ "service": "notify.notify" }))
+                .is_empty()
+        );
+        let (t, s) = (json!({}), json!({}));
+        let ctx = RunCtx::new(&t, &s);
+        let e = node
+            .run(
+                &json!({ "service": "notify.notify", "message": " " }),
+                &json!({}),
+                &ctx,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(e.kind, ErrorKind::Config);
     }
 
     #[tokio::test]
@@ -231,7 +419,7 @@ mod tests {
             ctx.take_logs(),
             vec!["called light.turn_on on light.a, light.b"]
         );
-        let call = fake.0.lock().unwrap()[0].clone();
+        let call = fake.calls.lock().unwrap()[0].clone();
         assert_eq!(
             call,
             ActionCall {

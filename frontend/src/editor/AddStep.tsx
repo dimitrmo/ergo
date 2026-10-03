@@ -8,8 +8,12 @@ const FRIENDLY: Record<string, string> = {
   'trigger.cron': 'At set times: every morning, on weekdays, every few minutes.',
   'trigger.manual': 'Only when you press Try it. Great for testing.',
   'trigger.mqtt': 'When a message arrives on an MQTT topic, like a button press.',
-  'ha.action': 'Turn on a light, set a thermostat, notify your phone: any Home Assistant action.',
-  'flow.if': 'Go one way when something is true, another way when it isn’t.',
+  'ha.action': 'Turn on a light, set a thermostat, lock a door: any Home Assistant action.',
+  'ha.notify': 'Send a notification to your phone, with a title and a message.',
+  'push.send': 'Pop up a notification in your browser, on any computer that turned them on.',
+  'flow.if': 'Go one way when something is true, another way when it isn’t. Check values, the time, the day or the sun.',
+  'flow.delay': 'Wait a few seconds, minutes or hours before the next step.',
+  'flow.wait': 'Wait until something happens, like a door closing, or give up after a while.',
   'mqtt.publish': 'Send a message to your MQTT broker.',
   'http.request': 'Call a web API or webhook: any method, headers and body.',
   'http.download': 'Fetch a feed, file or API response from the web.',
@@ -64,11 +68,6 @@ export function AddStep({
           </button>
         ))}
       </div>
-      {mode === 'step' && (
-        <p className="chooser-soon faint">
-          Coming soon: delays and waiting for something to happen.
-        </p>
-      )}
     </div>
   )
 

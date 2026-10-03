@@ -32,7 +32,7 @@ const METHODS: [&str; 7] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OP
 
 /// A rustls client with the `ring` provider and Mozilla's roots bundled in,
 /// so it needs no system certificate store and cross-compiles cleanly.
-fn tls_config() -> rustls::ClientConfig {
+pub(crate) fn tls_config() -> rustls::ClientConfig {
     let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
         .with_safe_default_protocol_versions()

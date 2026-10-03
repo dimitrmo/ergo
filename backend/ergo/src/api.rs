@@ -18,6 +18,7 @@ use crate::ha::Ha;
 use crate::mqtt::Mqtt;
 use crate::triggers::Triggers;
 use ergo_core::Engine;
+use ergo_nodes::{PUSH_TITLE, PushSubscription, URGENCIES, WebPush};
 
 pub struct AppState {
     pub db: Arc<Db>,
@@ -29,6 +30,7 @@ pub struct AppState {
     /// broker couldn't be reached at startup).
     pub mqtt_error: Option<String>,
     pub triggers: Arc<Triggers>,
+    pub push: Arc<WebPush>,
     pub started: Instant,
     /// Run history limits: (days, max runs).
     pub retention: (u32, u32),
@@ -89,6 +91,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/mqtt/messages", get(mqtt_messages).delete(mqtt_clear))
         .route("/api/mqtt/watch", post(mqtt_watch))
         .route("/api/mqtt/publish", post(mqtt_publish))
+        .route("/api/push", get(push_info))
+        .route("/api/push/subscriptions", post(push_subscribe))
+        .route(
+            "/api/push/subscriptions/{id}",
+            axum::routing::delete(push_unsubscribe),
+        )
+        .route("/api/push/subscriptions/{id}/test", post(push_test))
         .with_state(state)
 }
 
@@ -602,4 +611,90 @@ async fn mqtt_watch(State(s): AppStateRef, Json(body): Json<WatchBody>) -> ApiRe
         .await
         .map_err(|e| ApiError::bad(StatusCode::UNPROCESSABLE_ENTITY, e))?;
     Ok(Json(json!({ "filter": filter })))
+}
+
+/// The key browsers subscribe with, and the browsers that did.
+async fn push_info(State(s): AppStateRef) -> ApiResult {
+    let subs = s.db.push_subscriptions()?;
+    Ok(Json(json!({
+        "public_key": s.push.public_key(),
+        "urgencies": URGENCIES,
+        "subscriptions": subs
+            .iter()
+            .map(|sub| json!({ "id": sub.id, "name": sub.name, "endpoint": sub.endpoint }))
+            .collect::<Vec<_>>(),
+    })))
+}
+
+/// What `PushSubscription.toJSON()` gives in the browser, plus a name.
+#[derive(Deserialize)]
+struct SubscribeBody {
+    name: String,
+    subscription: BrowserSubscription,
+}
+
+#[derive(Deserialize)]
+struct BrowserSubscription {
+    endpoint: String,
+    keys: BrowserKeys,
+}
+
+#[derive(Deserialize)]
+struct BrowserKeys {
+    p256dh: String,
+    auth: String,
+}
+
+async fn push_subscribe(State(s): AppStateRef, Json(body): Json<SubscribeBody>) -> ApiResult {
+    let endpoint = body.subscription.endpoint.trim();
+    if !endpoint.starts_with("https://") {
+        return Err(ApiError::bad(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "a push endpoint must be an https address",
+        ));
+    }
+    let name = match body.name.trim() {
+        "" => "A browser".to_string(),
+        n => n.chars().take(60).collect(),
+    };
+    let id = s.db.save_push_subscription(&PushSubscription {
+        id: uuid::Uuid::new_v4().simple().to_string()[..12].to_string(),
+        name,
+        endpoint: endpoint.to_string(),
+        p256dh: body.subscription.keys.p256dh,
+        auth: body.subscription.keys.auth,
+    })?;
+    Ok(Json(json!({ "id": id })))
+}
+
+async fn push_unsubscribe(State(s): AppStateRef, Path(id): Path<String>) -> ApiResult {
+    if !s.db.delete_push_subscription(&id)? {
+        return Err(ApiError::bad(StatusCode::NOT_FOUND, "no such browser"));
+    }
+    Ok(Json(json!({ "deleted": id })))
+}
+
+/// Sends a test notification to one browser.
+async fn push_test(State(s): AppStateRef, Path(id): Path<String>) -> ApiResult {
+    let payload = json!({
+        "title": PUSH_TITLE,
+        "body": "Notifications work on this browser.",
+        "url": "",
+        "tag": "ergo-test",
+    });
+    let report = s
+        .push
+        .send(Some(&id), &payload, "normal")
+        .await
+        .map_err(|e| ApiError::bad(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    if let Some((_, e)) = report.failed.first() {
+        return Err(ApiError::bad(StatusCode::BAD_GATEWAY, e.clone()));
+    }
+    if !report.removed.is_empty() {
+        return Err(ApiError::bad(
+            StatusCode::GONE,
+            "this browser had turned notifications off; turn them on again",
+        ));
+    }
+    Ok(Json(json!({ "sent": report.sent })))
 }

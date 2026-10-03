@@ -251,6 +251,20 @@ impl MqttPublisher for NoMqtt {
     }
 }
 
+/// No browsers to push to.
+struct NoBrowsers;
+
+impl PushStore for NoBrowsers {
+    fn subscriptions(&self) -> Result<Vec<PushSubscription>, String> {
+        Ok(vec![])
+    }
+    fn forget(&self, _: &str) {}
+}
+
+fn no_push() -> Arc<WebPush> {
+    Arc::new(WebPush::new(&WebPush::generate_key(), Arc::new(NoBrowsers)).unwrap())
+}
+
 /// Records HA action calls.
 #[derive(Default)]
 struct RecordingHa(Mutex<Vec<ActionCall>>);
@@ -259,6 +273,14 @@ impl HaCaller for RecordingHa {
     async fn call_action(&self, call: ActionCall) -> Result<Value, String> {
         self.0.lock().unwrap().push(call);
         Ok(json!({ "context": { "id": "c" }, "response": null }))
+    }
+
+    fn state(&self, _: &str) -> Option<Value> {
+        None
+    }
+
+    fn local_now(&self) -> chrono::DateTime<chrono::FixedOffset> {
+        chrono::Utc::now().fixed_offset()
     }
 }
 
@@ -302,7 +324,7 @@ async fn if_sends_the_run_down_one_branch_to_an_ha_action() {
         let ha = Arc::new(RecordingHa::default());
         let sink = Arc::new(Sink::default());
         let engine = Engine::new(
-            Arc::new(registry(None, ha.clone())),
+            Arc::new(registry(None, ha.clone(), no_push())),
             sink.clone(),
             4,
             Duration::from_secs(5),
@@ -345,10 +367,14 @@ async fn if_sends_the_run_down_one_branch_to_an_ha_action() {
 
 #[test]
 fn without_mqtt_its_steps_explain_why() {
-    let r = registry(None, Arc::new(RecordingHa::default()));
+    let r = registry(None, Arc::new(RecordingHa::default()), no_push());
     assert!(r.get("trigger.mqtt").is_none() && r.get("mqtt.publish").is_none());
     assert!(r.unavailable("trigger.mqtt").contains("MQTT is off"));
-    let r = registry(Some(Arc::new(NoMqtt)), Arc::new(RecordingHa::default()));
+    let r = registry(
+        Some(Arc::new(NoMqtt)),
+        Arc::new(RecordingHa::default()),
+        no_push(),
+    );
     assert!(r.get("trigger.mqtt").is_some());
 }
 
@@ -388,6 +414,7 @@ async fn the_rss_pipeline_from_the_doc() {
         Arc::new(registry(
             Some(Arc::new(NoMqtt)),
             Arc::new(RecordingHa::default()),
+            no_push(),
         )),
         sink.clone(),
         4,
