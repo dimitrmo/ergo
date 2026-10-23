@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.12
+
+### Changed
+
+- Add logo
+
 ## 0.0.11
 
 ### Changed
