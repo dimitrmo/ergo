@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.15
+
+### Changed
+
+- Custom icon for home assistant
+
 ## 0.0.14
 
 ### Changed
