@@ -71,6 +71,25 @@ notifications off are forgotten the next time a push to them fails.
 Edits save automatically as a draft. The active version keeps running until
 you activate again.
 
+## Sidebar icon
+
+The sidebar entry uses the ergo mark, which Home Assistant doesn't ship. Until
+you add it, the entry shows no icon:
+
+1. Download
+   [`ergo-icons.js`](https://raw.githubusercontent.com/dimitrmo/ergo/master/addon/ergo-icons.js)
+   into your Home Assistant `config/www/` folder.
+2. Load it on every page by adding this to `configuration.yaml` (a dashboard
+   resource isn't enough, the sidebar loads before dashboards):
+
+   ```yaml
+   frontend:
+     extra_module_url:
+       - /local/ergo-icons.js
+   ```
+
+3. Restart Home Assistant and reload the browser.
+
 ## MQTT
 
 The `mqtt_url` option decides whether ergo uses MQTT:

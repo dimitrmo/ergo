@@ -13,7 +13,7 @@ image: ghcr.io/dimitrmo/{arch}-addon-ergo
 # The UI and API are reachable only through HA Ingress: no ports are
 # published, and nginx inside the image rejects anything else.
 ingress: true
-panel_icon: mdi:sitemap
+panel_icon: ergo:logo
 panel_title: Ergo
 
 homeassistant_api: true
