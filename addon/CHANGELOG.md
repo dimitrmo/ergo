@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.14
+
+### Changed
+
+- Align logo better
+
 ## 0.0.13
 
 ### Changed
