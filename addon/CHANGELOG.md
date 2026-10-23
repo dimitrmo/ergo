@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.16
+
+### Changed
+
+- Redraw icon
+
 ## 0.0.15
 
 ### Changed
