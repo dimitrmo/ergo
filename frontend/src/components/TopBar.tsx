@@ -3,7 +3,7 @@ import { useMqttEnabled } from '../hooks.ts'
 import { ErgoLogo } from './ErgoLogo.tsx'
 
 // Inside Home Assistant (Ingress panel or a Webpage dashboard) HA already
-// shows the name, so the brand is left out.
+// shows the name, so only the mark is shown, without the wordmark.
 const embedded = window.self !== window.top
 
 export type Section = 'workflows' | 'data' | 'mqtt'
@@ -18,14 +18,12 @@ export function TopBar({ left, section, children }: { left?: ReactNode; section?
   const mqtt = useMqttEnabled()
   return (
     <header className="topbar">
+      <a className="brand" href="#/">
+        <ErgoLogo title="ergo" />
+        {!embedded && <span>ergo</span>}
+      </a>
       {left ?? (
         <>
-          {!embedded && (
-            <a className="brand" href="#/">
-              <ErgoLogo title="ergo" />
-              <span>ergo</span>
-            </a>
-          )}
           <nav className="sections" aria-label="Sections">
             {SECTIONS.filter((s) => s.id !== 'mqtt' || mqtt).map((s) => (
               <a key={s.id} href={s.href} className={`section-tab${section === s.id ? ' on' : ''}`} aria-current={section === s.id ? 'page' : undefined}>
