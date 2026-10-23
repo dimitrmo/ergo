@@ -2,10 +2,6 @@ import type { ReactNode } from 'react'
 import { useMqttEnabled } from '../hooks.ts'
 import { ErgoLogo } from './ErgoLogo.tsx'
 
-// Inside Home Assistant (Ingress panel or a Webpage dashboard) HA already
-// shows the name, so only the mark is shown, without the wordmark.
-const embedded = window.self !== window.top
-
 export type Section = 'workflows' | 'data' | 'mqtt'
 
 const SECTIONS: { id: Section; label: string; href: string }[] = [
@@ -20,7 +16,6 @@ export function TopBar({ left, section, children }: { left?: ReactNode; section?
     <header className="topbar">
       <a className="brand" href="#/">
         <ErgoLogo title="ergo" />
-        {!embedded && <span>ergo</span>}
       </a>
       {left ?? (
         <>

@@ -522,6 +522,8 @@ pre.json {
 .topbar .brand svg {
   width: 24px;
   height: 24px;
+  margin-top: 5px;
+  margin-left: 4px;
 }
 
 .spacer {
@@ -531,7 +533,7 @@ pre.json {
 .sections {
   display: flex;
   align-self: stretch;
-  margin-left: 20px;
+  margin-left: 8px;
 }
 
 .section-tab {
