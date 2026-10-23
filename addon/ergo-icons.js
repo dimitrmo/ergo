@@ -20,3 +20,24 @@ window.customIcons.ergo = {
   getIcon: async (name) => ({ path: ICONS[name] }),
   getIconList: async () => Object.keys(ICONS).map((name) => ({ name })),
 }
+
+// An <ha-icon> looks its icon set up once. One drawn before this module
+// loaded (the sidebar often is) gave up and stays blank, so redraw those.
+// Icons drawn from here on find the set themselves.
+function* deep(root) {
+  for (const el of root.querySelectorAll('*')) {
+    yield el
+    if (el.shadowRoot) yield* deep(el.shadowRoot)
+  }
+}
+
+for (const el of deep(document)) {
+  if (el.localName !== 'ha-icon' || !el.icon?.startsWith('ergo:')) continue
+  const icon = el.icon
+  // `_legacy` is ha-icon's "unknown icon set" flag; it isn't cleared on reload.
+  el._legacy = false
+  el.icon = ''
+  el.updateComplete.then(() => {
+    el.icon = icon
+  })
+}
