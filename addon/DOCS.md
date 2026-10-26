@@ -85,10 +85,17 @@ you add it, the entry shows no icon:
    ```yaml
    frontend:
      extra_module_url:
-       - /local/ergo-icons.js
+       - /local/ergo-icons.js?v=1
    ```
 
 3. Restart Home Assistant and reload the browser.
+
+Browsers keep files from `/local/` cached, so after replacing
+`ergo-icons.js` with a newer copy, raise the `?v=` number, restart Home
+Assistant and reload. If the entry is still blank, run
+`window.customIcons?.ergo` in the browser console: `undefined` means the file
+isn't loaded (check its location and the `configuration.yaml` entry), anything
+else means an old copy, so download it again.
 
 ## MQTT
 
