@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.18
+
+### Changed
+
+- Copy icon
+
 ## 0.0.17
 
 ### Changed
