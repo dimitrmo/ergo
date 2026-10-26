@@ -9,6 +9,7 @@ RUN apk add --no-cache nginx \
 
 COPY rootfs /
 COPY ui /usr/share/ergo/ui
+COPY ergo-icons.js /usr/share/ergo/ergo-icons.js
 COPY bin/ergo-${BUILD_ARCH} /usr/bin/ergo
 
 ENV ERGO_DATA_DIR=/data

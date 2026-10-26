@@ -73,14 +73,12 @@ you activate again.
 
 ## Sidebar icon
 
-The sidebar entry uses the ergo mark, which Home Assistant doesn't ship. Until
-you add it, the entry shows no icon:
+The sidebar entry uses the ergo mark, which Home Assistant doesn't ship. The
+add-on copies it to `www/ergo-icons.js` in your Home Assistant config folder
+every time it starts; you only have to load it once:
 
-1. Download
-   [`ergo-icons.js`](https://raw.githubusercontent.com/dimitrmo/ergo/master/addon/ergo-icons.js)
-   into your Home Assistant `config/www/` folder.
-2. Load it on every page by adding this to `configuration.yaml` (a dashboard
-   resource isn't enough, the sidebar loads before dashboards):
+1. Add this to `configuration.yaml` (a dashboard resource isn't enough, the
+   sidebar loads before dashboards):
 
    ```yaml
    frontend:
@@ -88,14 +86,16 @@ you add it, the entry shows no icon:
        - /local/ergo-icons.js?v=1
    ```
 
-3. Restart Home Assistant and reload the browser.
+2. Restart Home Assistant and reload the browser.
 
-Browsers keep files from `/local/` cached, so after replacing
-`ergo-icons.js` with a newer copy, raise the `?v=` number, restart Home
-Assistant and reload. If the entry is still blank, run
-`window.customIcons?.ergo` in the browser console: `undefined` means the file
-isn't loaded (check its location and the `configuration.yaml` entry), anything
-else means an old copy, so download it again.
+Home Assistant only serves `/local/` if the `www` folder existed when it
+started. If the add-on had to create it (its log says so), restart Home
+Assistant once more.
+
+If the entry is still blank, open `/local/ergo-icons.js` in the browser: a
+404 means Home Assistant isn't serving it yet (restart it). Otherwise, raise
+the `?v=` number so the browser stops using a cached copy, restart Home
+Assistant and reload.
 
 ## MQTT
 

@@ -17,6 +17,10 @@ panel_icon: ergo:logo
 panel_title: Ergo
 
 homeassistant_api: true
+# Read-write so the add-on can install www/ergo-icons.js (the sidebar icon).
+map:
+  - type: homeassistant_config
+    read_only: false
 services:
   - mqtt:want
 
