@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.17
+
+### Changed
+
+- Fix icon
+
 ## 0.0.16
 
 ### Changed
