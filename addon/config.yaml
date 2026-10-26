@@ -17,7 +17,8 @@ panel_icon: ergo:logo
 panel_title: Ergo
 
 homeassistant_api: true
-# Read-write so the add-on can install www/ergo-icons.js (the sidebar icon).
+# Read-write so the add-on can install the sidebar icon: www/ergo-icons.js
+# and an extra_module_url entry in configuration.yaml.
 map:
   - type: homeassistant_config
     read_only: false
@@ -30,9 +31,11 @@ options:
   run_retention_days: 7
   run_retention_max: 1000
   max_concurrent_runs: 20
+  sidebar_icon: true
 schema:
   log_level: list(trace|debug|info|warn|error)
   mqtt_url: str?
   run_retention_days: int(1,365)
   run_retention_max: int(100,100000)
   max_concurrent_runs: int(1,200)
+  sidebar_icon: bool

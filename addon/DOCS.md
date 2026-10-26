@@ -73,29 +73,29 @@ you activate again.
 
 ## Sidebar icon
 
-The sidebar entry uses the ergo mark, which Home Assistant doesn't ship. The
-add-on copies it to `www/ergo-icons.js` in your Home Assistant config folder
-every time it starts; you only have to load it once:
+The sidebar entry uses the ergo mark, which Home Assistant doesn't ship. When
+the add-on starts, it copies `ergo-icons.js` to `www/` in your Home Assistant
+config folder and loads it on every page by adding this to
+`configuration.yaml` (the original is kept as
+`configuration.yaml.ergo-backup`):
 
-1. Add this to `configuration.yaml` (a dashboard resource isn't enough, the
-   sidebar loads before dashboards):
+```yaml
+frontend:
+  extra_module_url:
+    - /local/ergo-icons.js
+```
 
-   ```yaml
-   frontend:
-     extra_module_url:
-       - /local/ergo-icons.js?v=1
-   ```
+After the add-on's first start, restart Home Assistant and reload the browser.
 
-2. Restart Home Assistant and reload the browser.
+If `configuration.yaml` already sets `extra_module_url`, has `frontend:` more
+than once, or includes it from another file, the add-on leaves it alone and
+its log says what to add. Turn the `sidebar_icon` option off to stop the
+add-on touching `www/` and `configuration.yaml`.
 
-Home Assistant only serves `/local/` if the `www` folder existed when it
-started. If the add-on had to create it (its log says so), restart Home
-Assistant once more.
-
-If the entry is still blank, open `/local/ergo-icons.js` in the browser: a
-404 means Home Assistant isn't serving it yet (restart it). Otherwise, raise
-the `?v=` number so the browser stops using a cached copy, restart Home
-Assistant and reload.
+Still blank? Open `/local/ergo-icons.js` in the browser: a 404 means Home
+Assistant hasn't been restarted since `www/` was created. Otherwise, the
+browser may be holding an old copy: add `?v=2` to the URL in
+`configuration.yaml`, restart Home Assistant and reload.
 
 ## MQTT
 

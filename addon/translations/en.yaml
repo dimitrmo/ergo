@@ -17,3 +17,8 @@ configuration:
   max_concurrent_runs:
     name: Concurrent runs
     description: Runs beyond this limit are skipped (and logged) until a slot frees up.
+  sidebar_icon:
+    name: Install sidebar icon
+    description: >-
+      Copy ergo-icons.js to www/ and load it from configuration.yaml so the
+      sidebar shows the ergo mark. Restart Home Assistant after the first start.
