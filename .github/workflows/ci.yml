@@ -4,6 +4,8 @@ name: CI
 # and the add-on config (patch, or #minor / #major in a commit message), commits
 # that as "Release X.Y.Z [skip ci]", pushes both images to GHCR, then tags the
 # commit and creates the GitHub release, and HA shows "Update available".
+# Pull requests only test and build (incl. the image smoke test); nothing is
+# pushed, tagged or released from a PR.
 on:
   pull_request:
   push:
@@ -157,6 +159,7 @@ jobs:
   image:
     name: Publish image (${{ matrix.arch }})
     needs: release-commit
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -209,6 +212,7 @@ jobs:
   github-release:
     name: Tag and release
     needs: [release-commit, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
