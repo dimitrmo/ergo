@@ -577,7 +577,11 @@ impl Db {
         let mut stmt = conn.prepare(&format!(
             "SELECT * FROM {quoted} ORDER BY rowid DESC LIMIT ?1 OFFSET ?2"
         ))?;
-        let columns: Vec<String> = stmt.column_names().into_iter().map(|c| c.to_string()).collect();
+        let columns: Vec<String> = stmt
+            .column_names()
+            .into_iter()
+            .map(|c| c.to_string())
+            .collect();
         let n = columns.len();
         let rows = stmt
             .query_map(params![limit, offset], |r| {
