@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Rust backend (workspace: ergo, ergo-core, ergo-nodes)
+  - package-ecosystem: cargo
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+
+  # Frontend (Vite / React)
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  # Home Assistant add-on base image
+  - package-ecosystem: docker
+    directory: /addon
+    schedule:
+      interval: weekly
+
+  # Local dev stack (Home Assistant, Mosquitto)
+  - package-ecosystem: docker-compose
+    directory: /dev
+    schedule:
+      interval: weekly
+
+  # CI workflow actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
