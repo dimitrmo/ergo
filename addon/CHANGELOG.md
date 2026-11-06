@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.20
+
+### Changed
+
+- Add dependabot
+
 ## 0.0.19
 
 ### Changed
