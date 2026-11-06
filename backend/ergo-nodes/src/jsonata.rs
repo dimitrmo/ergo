@@ -15,6 +15,7 @@ fn options() -> EvaluatorOptions {
         timeout_ms: Some(2_000),
         max_stack_depth: Some(200),
         max_sequence_length: Some(100_000),
+        ..Default::default()
     }
 }
 

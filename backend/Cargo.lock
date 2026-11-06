@@ -1618,9 +1618,9 @@ dependencies = [
 
 [[package]]
 name = "jsonata-core"
-version = "2.2.10"
+version = "2.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1d8f436abcd1e45e71742d72ac5a7e8f459ab9a7dc8fb530d920dc53dfe4a33"
+checksum = "71e4f6e2f5d1323a63d50641a7fb2e0af32a2b3a601f007058a377d72aaa4311"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -1629,6 +1629,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.10.3",
  "regex",
+ "regex-syntax",
  "serde",
  "serde_json",
  "stacker",
