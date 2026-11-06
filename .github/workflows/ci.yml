@@ -1,19 +1,26 @@
 name: CI
 
-# Every green push to master is released: CI bumps the version in Cargo, npm
-# and the add-on config (patch, or #minor / #major in a commit message), commits
-# that as "Release X.Y.Z [skip ci]", pushes both images to GHCR, then tags the
-# commit and creates the GitHub release, and HA shows "Update available".
-# Pull requests only test and build (incl. the image smoke test); nothing is
-# pushed, tagged or released from a PR.
+# Pull requests are checked and built (incl. the image smoke test) with nothing
+# pushed, tagged or released.
+#
+# A push to master first works out the next version (patch, or #minor / #major
+# in a commit message since the last release) and stamps it into every
+# component with dev/bump-version.sh before building, so the binaries, the UI
+# and both add-on images carry it. Only once the images are pushed does the
+# last job commit the bump ("Release X.Y.Z [skip ci]"), tag it vX.Y.Z and
+# publish the GitHub release, so tag, images and release always match. A run
+# that fails before that leaves master untouched, and the next push retries
+# the same number.
 on:
   pull_request:
   push:
     branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Never cancel master: that could stop a publish half-way.
+  # Master runs queue rather than cancel: two quick pushes can't claim the same
+  # version, and a publish is never stopped half-way.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -68,19 +75,56 @@ jobs:
   version:
     name: Version
     runs-on: ubuntu-24.04
+    outputs:
+      release: ${{ steps.next.outputs.release }}
+      version: ${{ steps.next.outputs.version }}
+      notes: ${{ steps.next.outputs.notes }}
     steps:
       - uses: actions/checkout@v7
-      - run: |
+        with:
+          fetch-depth: 0
+      - name: Components agree on the version
+        run: |
           version=$(sed -n 's/^version: "\(.*\)"/\1/p' addon/config.yaml)
           cargo=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' backend/Cargo.toml)
           npm=$(jq -r .version frontend/package.json)
           if [ "$version" != "$cargo" ] || [ "$version" != "$npm" ]; then
             echo "::error::versions differ: add-on $version, backend $cargo, frontend $npm"; exit 1
           fi
+      - name: Work out the next version
+        id: next
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          # The add-on config holds the last released version: a bump only
+          # reaches master once that version is fully published.
+          current=$(sed -n 's/^version: "\(.*\)"/\1/p' addon/config.yaml)
+          if [ "$(git rev-parse -q --verify "refs/tags/v$current^{commit}" || true)" = "$(git rev-parse HEAD)" ]; then
+            echo "Nothing new since v$current."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
+          range=${last:+$last..}HEAD
+          IFS=. read -r major minor patch <<< "$current"
+          log=$(git log --format=%B "$range")
+          if grep -q '#major' <<< "$log"; then next="$((major + 1)).0.0"
+          elif grep -q '#minor' <<< "$log"; then next="$major.$((minor + 1)).0"
+          else next="$major.$minor.$((patch + 1))"; fi
+          notes=$(git log --no-merges --format='- %s' "$range" | grep -v '^- Release [0-9]' || true)
+          [ -n "$notes" ] || notes="- Maintenance"
+          echo "Next version: $next (from $current, last tag ${last:-none})"
+          {
+            echo "release=true"
+            echo "version=$next"
+            echo "notes<<NOTES_EOF"
+            echo "$notes"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
   release-build:
     name: Release build check
-    needs: [backend, frontend]
+    needs: [version, backend, frontend]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -95,6 +139,14 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Stamp the new version
+        if: needs.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          CHANGELOG_NOTES="$RUNNER_TEMP/notes.md" dev/bump-version.sh "$VERSION"
       # Both architectures build; the amd64 image is built and smoke-tested.
       - run: make addon ARCH=aarch64
       - run: make addon ARCH=amd64
@@ -115,51 +167,10 @@ jobs:
           path: build/addon-aarch64/bin/ergo-aarch64
           retention-days: 14
 
-  release-commit:
-    name: Release commit
-    needs: [version, addon, release-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    outputs:
-      version: ${{ steps.release.outputs.version }}
-      sha: ${{ steps.release.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      - id: release
-        run: |
-          # Everything since the last release; #minor or #major in any commit
-          # message picks that bump, otherwise patch. The first release is minor.
-          last=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
-          range=${last:+"$last"..}HEAD
-          if [ -z "$last" ]; then bump=minor; else bump=patch; fi
-          if git log --format=%B $range | grep -q '#major'; then bump=major
-          elif git log --format=%B $range | grep -q '#minor'; then bump=minor; fi
-          git log --no-merges --format='- %s' $range \
-            | grep -v '^- Release [0-9]' > "$RUNNER_TEMP/notes.md" || echo "- Maintenance" > "$RUNNER_TEMP/notes.md"
-          CHANGELOG_NOTES="$RUNNER_TEMP/notes.md" dev/bump-version.sh "$bump"
-          version=$(sed -n 's/^version: "\(.*\)"/\1/p' addon/config.yaml)
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A backend frontend addon
-          git commit -m "Release $version" -m "[skip ci]"
-          # Fails if master moved on meanwhile; that newer run releases instead.
-          git push origin HEAD:master
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
   image:
     name: Publish image (${{ matrix.arch }})
-    needs: release-commit
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [version, addon, release-build]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -173,8 +184,6 @@ jobs:
             platform: linux/amd64
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.release-commit.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
         with:
@@ -184,7 +193,15 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: make addon ARCH=${{ matrix.arch }}
+      - name: Stamp the new version
+        if: needs.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          CHANGELOG_NOTES="$RUNNER_TEMP/notes.md" dev/bump-version.sh "$VERSION"
+      - run: make addon ARCH=${{ matrix.arch }} DEV_VERSION=${{ needs.version.outputs.version }}
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -201,32 +218,65 @@ jobs:
           build-args: BUILD_ARCH=${{ matrix.arch }}
           push: true
           tags: |
-            ${{ steps.name.outputs.image }}:${{ needs.release-commit.outputs.version }}
+            ${{ steps.name.outputs.image }}:${{ needs.version.outputs.version }}
             ${{ steps.name.outputs.image }}:latest
           labels: |
             io.hass.type=addon
             io.hass.arch=${{ matrix.arch }}
-            io.hass.version=${{ needs.release-commit.outputs.version }}
+            io.hass.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
-  github-release:
-    name: Tag and release
-    needs: [release-commit, image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+  release:
+    name: Release
+    needs: [version, image]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.release-commit.outputs.sha }}
-      - name: Release notes from the changelog
-        run: |
-          awk -v v="## ${{ needs.release-commit.outputs.version }}" '$0==v{f=1;next} /^## /{f=0} f' addon/CHANGELOG.md > notes.md
-      # Tags the release commit; only after both images are pushed, so a failed
-      # publish leaves the version untagged and the next master push retries it.
-      - uses: softprops/action-gh-release@v3
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v7
         with:
-          tag_name: v${{ needs.release-commit.outputs.version }}
-          target_commitish: ${{ needs.release-commit.outputs.sha }}
-          body_path: notes.md
+          node-version: 24
+      - name: Stamp the new version
+        if: needs.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          CHANGELOG_NOTES="$RUNNER_TEMP/notes.md" dev/bump-version.sh "$VERSION"
+      # The bump commit sits on top of exactly the code that was built and goes
+      # up with its tag in one atomic push. Pushes made with GITHUB_TOKEN don't
+      # start another run, and [skip ci] makes sure of it.
+      - name: Commit the version and tag it
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A backend frontend addon
+          git status --short
+          git commit -m "Release $VERSION" -m "[skip ci]"
+          git tag -a "v$VERSION" -m "Release $VERSION"
+          if ! git push --atomic origin HEAD:master "refs/tags/v$VERSION"; then
+            # Someone pushed to master meanwhile. Tag what was built anyway;
+            # that newer push's run puts the next version on master.
+            echo "::warning::master moved on during the release; v$VERSION is tagged but its commit isn't on master."
+            git push origin "refs/tags/v$VERSION"
+          fi
+          git ls-remote --exit-code --tags origin "refs/tags/v$VERSION"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' addon/CHANGELOG.md > notes.md
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file notes.md
