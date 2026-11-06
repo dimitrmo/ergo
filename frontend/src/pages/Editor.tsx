@@ -178,19 +178,19 @@ function EditorInner({ id }: { id: string }) {
   useEffect(() => {
     const el = canvasRef.current
     if (!el) return
-    let width = el.clientWidth
-    let timer: ReturnType<typeof setTimeout> | undefined
+    // Mutated from the observer: plain locals can't be reassigned there.
+    const last: { width: number; timer?: ReturnType<typeof setTimeout> } = { width: el.clientWidth }
     const observer = new ResizeObserver(() => {
-      if (el.clientWidth === width) return
-      width = el.clientWidth
-      clearTimeout(timer)
+      if (el.clientWidth === last.width) return
+      last.width = el.clientWidth
+      clearTimeout(last.timer)
       // React Flow sees the new size through its own observer; fit just after.
-      timer = setTimeout(() => fitted.current && fit(), 50)
+      last.timer = setTimeout(() => fitted.current && fit(), 50)
     })
     observer.observe(el)
     return () => {
       observer.disconnect()
-      clearTimeout(timer)
+      clearTimeout(last.timer)
     }
   }, [fit])
 

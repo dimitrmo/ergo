@@ -54,11 +54,11 @@ export function Mqtt() {
 
   // Polls for new messages; this also keeps the backend's watch alive.
   useEffect(() => {
-    let alive = true
+    const stop = new AbortController()
     const load = async () => {
       try {
         const r = await api.mqttMessages(seq.current)
-        if (!alive) return
+        if (stop.signal.aborted) return
         // A lower seq means ergo restarted; start over.
         const reset = r.seq < seq.current
         seq.current = r.seq
@@ -67,13 +67,13 @@ export function Mqtt() {
           setMessages((m) => (reset ? r.messages : [...m, ...r.messages]).slice(-KEEP))
         }
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e))
+        if (!stop.signal.aborted) setError(e instanceof Error ? e.message : String(e))
       }
     }
     load()
     const t = setInterval(load, POLL_MS)
     return () => {
-      alive = false
+      stop.abort()
       clearInterval(t)
     }
   }, [])
