@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.25
+
+### Changed
+
+- Latest mininija
+
 ## 0.0.24
 
 ### Changed
