@@ -517,6 +517,8 @@ pre.json {
   flex: none;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  position: relative;
+  top: 2px;
 }
 
 .topbar .brand svg {
@@ -578,6 +580,10 @@ pre.json {
   align-items: center;
   gap: 8px;
   text-decoration: none;
+}
+
+.statusbar .push-right {
+  margin-left: auto;
 }
 
 .statusbar a.item:hover {
