@@ -23,7 +23,7 @@ pub fn render_str(template: &str, ctx: &Value) -> Result<String, String> {
         return Ok(template.to_string());
     }
     env()
-        .render_str(template, ctx)
+        .render_str(template, minijinja::value::Serde(ctx))
         .map_err(|e| format!("template error in `{template}`: {e}"))
 }
 
