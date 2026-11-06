@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.24
+
+### Changed
+
+- Fix clippy issues
+
 ## 0.0.23
 
 ### Changed
