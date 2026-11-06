@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.22
+
+### Changed
+
+- Fix format issues
+- Better relase process
+
 ## 0.0.21
 
 ### Changed
