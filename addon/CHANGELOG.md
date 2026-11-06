@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.23
+
+### Changed
+
+- Remove warnings
+
 ## 0.0.22
 
 ### Changed
