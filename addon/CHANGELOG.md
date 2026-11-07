@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.27
+
+### Changed
+
+- Switch to nodejs26
+
 ## 0.0.26
 
 ### Changed
