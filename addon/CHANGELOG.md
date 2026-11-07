@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.26
+
+### Changed
+
+- Bump the npm-minor-patch group across 1 directory with 6 updates
+
 ## 0.0.25
 
 ### Changed
