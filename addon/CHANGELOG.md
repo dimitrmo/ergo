@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.28
+
+### Changed
+
+- Bump the cargo-minor-patch group across 1 directory with 6 updates
+
 ## 0.0.27
 
 ### Changed
