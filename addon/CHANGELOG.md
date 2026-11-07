@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.29
+
+### Changed
+
+- Bump typescript from 6.0.3 to 7.0.2 in /frontend
+
 ## 0.0.28
 
 ### Changed
